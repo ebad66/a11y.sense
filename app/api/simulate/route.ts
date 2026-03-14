@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
 import { getProfile, ProfileId } from '@/lib/profiles';
 import { simulateProfileView } from '@/lib/gemini';
+import { generateBlindSimulationHtml } from '@/lib/blind-simulation';
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
   try {
@@ -43,9 +44,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Blind profile: generate interactive HTML simulation instead of calling the image API
+    if (profileId === 'blind') {
+      console.log(`[Simulate] Running blind HTML simulation for ${session.url}`);
+      const html = await generateBlindSimulationHtml(session.url);
+      return NextResponse.json({ profileId: 'blind', type: 'html', html, description: '' });
+    }
+
     const keyPreview = (process.env.GEMINI_API_KEY || '').slice(0, 8);
     console.log(`[Simulate] Running ${profile.label} simulation | key starts with: ${keyPreview}…`);
-
 
     const result = await simulateProfileView(
       imageData,

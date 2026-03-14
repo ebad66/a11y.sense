@@ -6,7 +6,7 @@ const MODEL = 'gemini-3-pro-image-preview'; // Nano Banana Pro
 function getClient(): GoogleGenAI {
   const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
   if (!apiKey) throw new Error('GEMINI_API_KEY is not set');
-  return new GoogleGenAI({ apiKey });
+  return new GoogleGenAI({ apiKey, httpOptions: { timeout: 300000 } });
 }
 
 export interface SimulationResult {

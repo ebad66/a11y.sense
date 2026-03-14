@@ -17,8 +17,10 @@ export function SimulationView({ profile, sessionId, hasScreenshot, onClose }: S
   const [screenshotBase64, setScreenshotBase64] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{
-    imageBase64: string;
-    mimeType: string;
+    type?: 'html';
+    html?: string;
+    imageBase64?: string;
+    mimeType?: string;
     description: string;
   } | null>(null);
 
@@ -196,11 +198,21 @@ export function SimulationView({ profile, sessionId, hasScreenshot, onClose }: S
               className="rounded-lg overflow-hidden"
               style={{ border: `1px solid ${profile.color}66` }}
             >
-              <img
-                src={`data:${result.mimeType};base64,${result.imageBase64}`}
-                alt={`Page as experienced by ${profile.label} users`}
-                className="w-full"
-              />
+              {result.type === 'html' ? (
+                <iframe
+                  srcDoc={result.html}
+                  sandbox="allow-scripts"
+                  className="w-full"
+                  style={{ height: '560px', border: 'none', display: 'block' }}
+                  title={`Screen reader simulation`}
+                />
+              ) : (
+                <img
+                  src={`data:${result.mimeType};base64,${result.imageBase64}`}
+                  alt={`Page as experienced by ${profile.label} users`}
+                  className="w-full"
+                />
+              )}
             </div>
 
             {result.description && (
