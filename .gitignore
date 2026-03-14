@@ -23,6 +23,7 @@
 # misc
 .DS_Store
 *.pem
+Thumbs.db
 
 # debug
 npm-debug.log*
@@ -30,8 +31,14 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# env files — never commit secrets
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+# allow the example template
+!.env.local.example
 
 # vercel
 .vercel
@@ -39,3 +46,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# playwright
+/test-results/
+/playwright-report/
+/playwright/.cache/
