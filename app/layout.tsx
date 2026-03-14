@@ -5,7 +5,7 @@ import './globals.css';
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 
 export const metadata: Metadata = {
-  title: 'InclusionLens — Accessibility QA Sandbox',
+  title: 'a11y.sense',
   description:
     'Audit any webpage for accessibility issues across 5 disability profiles using AI-powered analysis.',
   keywords: ['accessibility', 'a11y', 'WCAG', 'audit', 'disability', 'inclusion'],

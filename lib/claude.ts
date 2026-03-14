@@ -7,7 +7,8 @@ export interface AccessibilityIssue {
   title: string;
   description: string;
   fix: string;
-  element?: string;
+  element?: string;   // human-readable HTML snippet
+  selector?: string;  // machine-usable CSS selector for DOM querying
   wcag?: string;
 }
 
@@ -36,7 +37,8 @@ Each object must have:
 - "title": string (max 60 chars)
 - "description": string (2-3 sentences on impact for ${profile.label} users)
 - "fix": string (specific, actionable recommendation or code snippet)
-- "element": string (optional — the HTML element or CSS selector causing the issue)
+- "element": string (REQUIRED for any Critical or Warning — the actual HTML snippet of the broken element, e.g. '<img src="/hero.jpg" alt="">' or '<button class="nav-btn">Menu</button>')
+- "selector": string (REQUIRED for any Critical or Warning — a CSS selector that uniquely identifies THIS SPECIFIC element, not a generic tag. Use attribute combinations: 'img[src*="hero"]', 'input[name="email"]', 'button[aria-label="Close menu"]', 'video:not([track])', 'a[href="/about"][class*="nav"]'. NEVER return a bare tag like 'img', 'a', 'p', 'div', 'button', 'h1' alone — always combine with at least one attribute, class, id, or pseudo-class so it targets exactly the broken element.)
 - "wcag": string (optional — e.g. "1.1.1 Non-text Content")
 
 Critical = completely blocks access. Warning = significantly impairs. Pass = done correctly (include 1-2).
@@ -78,6 +80,7 @@ ${page.condensedHtml}`;
         description: String(i.description),
         fix: String(i.fix),
         element: i.element ? String(i.element) : undefined,
+        selector: i.selector ? String(i.selector) : undefined,
         wcag: i.wcag ? String(i.wcag) : undefined,
       }));
   } catch (e) {

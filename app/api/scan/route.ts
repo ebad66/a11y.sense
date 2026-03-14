@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { nanoid } from 'nanoid';
 import { scrapeFromHtml } from '@/lib/scraper';
-import { auditAllProfiles } from '@/lib/claude'; // now uses Gemini 2.5 Flash
+import { auditAllProfiles } from '@/lib/claude';
 import { createSession } from '@/lib/session';
 import { PROFILES } from '@/lib/profiles';
 import { capturePageData } from '@/lib/screenshot';
@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
 
     console.log(`[Scan] Starting scan for: ${normalizedUrl}`);
 
-    // Single Playwright session: get rendered HTML + screenshot together
+    // Open browser — keep it alive until coords are resolved
     let browserResult: Awaited<ReturnType<typeof capturePageData>>;
     try {
       browserResult = await capturePageData(normalizedUrl);
@@ -51,24 +51,56 @@ export async function POST(req: NextRequest) {
       `[Scan] Page loaded | HTML: ${browserResult.renderedHtml.length} chars | Screenshot: OK`
     );
 
-    // Parse the rendered HTML
     const page = await scrapeFromHtml(normalizedUrl, browserResult.renderedHtml);
 
     console.log(`[Scan] Parsed: "${page.title}" | ${page.images.length} images, ${page.links.length} links`);
 
-    // Run Claude audit for all 5 profiles in parallel
+    // Run AI audit — browser stays open in parallel
     let issues: Record<string, import('@/lib/claude').AccessibilityIssue[]>;
     try {
       issues = await auditAllProfiles(page, PROFILES);
     } catch (err) {
-      console.error('[Scan] Claude audit failed:', err);
+      console.error('[Scan] Audit failed:', err);
+      await browserResult.close();
       return NextResponse.json(
         { error: `Accessibility analysis failed: ${(err as Error).message}` },
         { status: 500 }
       );
     }
 
-    console.log(`[Scan] Audit complete. Profiles: ${Object.keys(issues).join(', ')}`);
+    console.log(`[Scan] Audit complete. Resolving element coordinates...`);
+
+    // Build one coord request per unique key across all issues.
+    // Key = selector (preferred) or element snippet — used to look up coords in VisualizeTab.
+    const allIssues = Object.values(issues).flat();
+    const requestMap = new Map<string, import('@/lib/screenshot').CoordRequest>();
+    for (const issue of allIssues) {
+      const key = issue.selector || issue.element;
+      if (key && !requestMap.has(key)) {
+        requestMap.set(key, {
+          key,
+          selector: issue.selector,
+          element:  issue.element,
+        });
+      }
+    }
+
+    // Resolve coordinates while browser is still open — no second launch needed
+    let elementCoords: Record<string, import('@/lib/screenshot').ElementBox> = {};
+    try {
+      if (requestMap.size > 0) {
+        const boxes = await browserResult.resolveCoords(Array.from(requestMap.values()));
+        for (const box of boxes) {
+          if (box.found) elementCoords[box.selector] = box;
+        }
+        console.log(`[Scan] Coords resolved: ${Object.keys(elementCoords).length}/${requestMap.size} found`);
+      }
+    } catch (err) {
+      console.warn('[Scan] Coord resolution failed (non-fatal):', err);
+    }
+
+    // Now close the browser
+    await browserResult.close();
 
     const sessionId = nanoid(12);
     createSession(
@@ -77,7 +109,10 @@ export async function POST(req: NextRequest) {
       page,
       issues,
       browserResult.screenshot.base64,
-      browserResult.screenshot.mimeType
+      browserResult.screenshot.mimeType,
+      browserResult.screenshot.width,
+      browserResult.screenshot.height,
+      elementCoords
     );
 
     return NextResponse.json({

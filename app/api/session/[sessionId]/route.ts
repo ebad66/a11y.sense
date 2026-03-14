@@ -23,5 +23,8 @@ export async function GET(
     expiresAt: session.expiresAt,
     issues: session.issues,
     hasScreenshot: !!session.screenshot,
+    screenshotWidth: session.screenshotWidth ?? 1280,
+    screenshotHeight: session.screenshotHeight ?? 900,
+    elementCoords: session.elementCoords ?? {},
   });
 }

@@ -77,13 +77,8 @@ export default function HomePage() {
             lineHeight: '1.6',
           }}
         >
-          InclusionLens
+          a11y.sense
         </h1>
-        <p className="text-gray-400 text-lg leading-relaxed">
-          Paste any URL. Get an AI-powered accessibility audit across 5 disability profiles —
-          instantly.
-        </p>
-
         {/* Profile preview pills */}
         <div className="flex flex-wrap justify-center gap-2 mt-6" aria-label="Supported disability profiles">
           {PROFILES.map((p) => (
