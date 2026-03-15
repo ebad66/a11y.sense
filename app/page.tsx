@@ -2,7 +2,7 @@
 
 import { useState, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import { PROFILES } from '@/lib/profiles';
+import { WCAG_PRINCIPLES } from '@/lib/wcag';
 
 const EXAMPLE_URLS = [
   'https://gov.uk',
@@ -79,9 +79,9 @@ export default function HomePage() {
         >
           a11y.sense
         </h1>
-        {/* Profile preview pills */}
-        <div className="flex flex-wrap justify-center gap-2 mt-6" aria-label="Supported disability profiles">
-          {PROFILES.map((p) => (
+        {/* WCAG principle pills */}
+        <div className="flex flex-wrap justify-center gap-2 mt-6" aria-label="WCAG 2.1 principles covered">
+          {WCAG_PRINCIPLES.map((p) => (
             <span
               key={p.id}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium text-white"
@@ -154,7 +154,7 @@ export default function HomePage() {
           </div>
 
           <p id="url-hint" className="text-xs text-gray-600">
-            The page will be fetched and analyzed by Claude AI. This typically takes 20–40 seconds.
+            The page will be fetched and audited against all four WCAG 2.1 principles. This typically takes 20–40 seconds.
           </p>
         </form>
 
@@ -213,19 +213,19 @@ export default function HomePage() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-12 max-w-2xl w-full">
         {[
           {
-            icon: '⚡',
-            title: 'Parallel analysis',
-            desc: 'All 5 profiles analyzed simultaneously via Claude AI',
-          },
-          {
             icon: '🎯',
-            title: 'WCAG-referenced',
-            desc: 'Issues mapped to specific WCAG 2.1 success criteria',
+            title: 'WCAG 2.1 structured',
+            desc: 'Issues grouped under the four POUR principles — Perceivable, Operable, Understandable, Robust',
           },
           {
-            icon: '👁️',
-            title: 'Visual simulations',
-            desc: 'See the page through each user\'s eyes via Gemini Vision',
+            icon: '⚡',
+            title: 'Parallel audit',
+            desc: 'All four WCAG principles analysed simultaneously via Gemini AI',
+          },
+          {
+            icon: '📍',
+            title: 'Element pinpointing',
+            desc: 'Broken elements highlighted on a live screenshot with precise coordinate matching',
           },
         ].map((feat) => (
           <div
@@ -243,7 +243,7 @@ export default function HomePage() {
 
       {/* Footer */}
       <footer className="mt-16 text-xs text-gray-700 text-center">
-        Powered by Claude (Anthropic) · Gemini (Google) · Next.js
+        Powered by Gemini (Google) · Next.js · WCAG 2.1
       </footer>
     </main>
   );

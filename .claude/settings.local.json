@@ -6,7 +6,8 @@
       "Bash(curl -s -X POST http://localhost:3000/api/scan -H \"Content-Type: application/json\" -d '{\"\"url\"\":\"\"https://www.deeplearning.ai/short-courses/building-ai-browser-agents/\"\"}' --max-time 180)",
       "Bash(curl -s http://localhost:3000/api/session/Jroik5il49XE)",
       "Bash(taskkill /F /PID 1740)",
-      "Bash(pkill -f \"next dev\")"
+      "Bash(pkill -f \"next dev\")",
+      "Bash(npx tsc:*)"
     ]
   }
 }

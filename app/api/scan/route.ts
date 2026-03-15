@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { nanoid } from 'nanoid';
 import { scrapeFromHtml } from '@/lib/scraper';
-import { auditAllProfiles } from '@/lib/claude';
+import { auditAllPrinciples } from '@/lib/claude';
 import { createSession } from '@/lib/session';
-import { PROFILES } from '@/lib/profiles';
+import { WCAG_PRINCIPLES } from '@/lib/wcag';
 import { capturePageData } from '@/lib/screenshot';
 
 export const maxDuration = 120;
@@ -55,10 +55,10 @@ export async function POST(req: NextRequest) {
 
     console.log(`[Scan] Parsed: "${page.title}" | ${page.images.length} images, ${page.links.length} links`);
 
-    // Run AI audit — browser stays open in parallel
+    // Run WCAG audit across all four principles in parallel — browser stays open
     let issues: Record<string, import('@/lib/claude').AccessibilityIssue[]>;
     try {
-      issues = await auditAllProfiles(page, PROFILES);
+      issues = await auditAllPrinciples(page, WCAG_PRINCIPLES);
     } catch (err) {
       console.error('[Scan] Audit failed:', err);
       await browserResult.close();
@@ -115,16 +115,17 @@ export async function POST(req: NextRequest) {
       elementCoords
     );
 
+    const allIssuesFlat = Object.values(issues).flat();
     return NextResponse.json({
       sessionId,
       url: normalizedUrl,
       pageTitle: page.title,
       hasScreenshot: true,
-      profiles: Object.keys(issues),
+      principles: Object.keys(issues),
       summary: {
-        totalIssues: Object.values(issues).flat().filter((i) => i.severity !== 'Pass').length,
-        criticalCount: Object.values(issues).flat().filter((i) => i.severity === 'Critical').length,
-        warningCount: Object.values(issues).flat().filter((i) => i.severity === 'Warning').length,
+        totalIssues:   allIssuesFlat.filter((i) => i.severity !== 'Pass').length,
+        criticalCount: allIssuesFlat.filter((i) => i.severity === 'Critical').length,
+        warningCount:  allIssuesFlat.filter((i) => i.severity === 'Warning').length,
       },
     });
   } catch (err) {

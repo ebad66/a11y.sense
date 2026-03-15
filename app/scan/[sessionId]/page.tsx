@@ -4,9 +4,8 @@ import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { ProfileCard } from '@/components/ProfileCard';
 import { IssueRow } from '@/components/IssueRow';
-import { SimulationView } from '@/components/SimulationView';
 import { VisualizeTab } from '@/components/VisualizeTab';
-import { PROFILES, Profile, ProfileId } from '@/lib/profiles';
+import { WCAG_PRINCIPLES, WcagPrincipleId, WcagPrinciple } from '@/lib/wcag';
 import { AccessibilityIssue } from '@/lib/claude';
 
 interface SessionData {
@@ -15,32 +14,33 @@ interface SessionData {
   pageTitle: string;
   createdAt: number;
   expiresAt: number;
-  issues: Record<ProfileId, AccessibilityIssue[]>;
+  issues: Record<WcagPrincipleId, AccessibilityIssue[]>;
   hasScreenshot: boolean;
   screenshotWidth: number;
   screenshotHeight: number;
   elementCoords: Record<string, { xPct: number; yPct: number; wPct: number; hPct: number }>;
 }
 
-type IssueTab = 'critical' | 'warning' | 'pass' | 'visualize';
+type MainTab = 'problems' | 'visualize';
 
 export default function ScanPage({ params }: { params: Promise<{ sessionId: string }> }) {
   const { sessionId } = use(params);
   const router = useRouter();
 
-  const [session, setSession] = useState<SessionData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [activeProfileId, setActiveProfileId] = useState<ProfileId>('blind');
-  const [showSimulation, setShowSimulation] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [rescanning, setRescanning] = useState(false);
-  const [activeTab, setActiveTab] = useState<IssueTab>('critical');
+  const [session,           setSession]           = useState<SessionData | null>(null);
+  const [loading,           setLoading]           = useState(true);
+  const [error,             setError]             = useState<string | null>(null);
+  const [activePrincipleId, setActivePrincipleId] = useState<WcagPrincipleId>('perceivable');
+  const [copied,            setCopied]            = useState(false);
+  const [rescanning,        setRescanning]        = useState(false);
+  const [activeTab,         setActiveTab]         = useState<MainTab>('visualize');
+  // Which accordion sections are open inside the Problems tab
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({ critical: true, warning: false, passing: false });
 
   useEffect(() => {
     let cancelled = false;
     const fetchWithRetry = async (attemptsLeft: number): Promise<SessionData> => {
-      const r = await fetch(`/api/session/${sessionId}`);
+      const r    = await fetch(`/api/session/${sessionId}`);
       const data = await r.json();
       if (data.error) {
         if (attemptsLeft > 1) {
@@ -56,11 +56,12 @@ export default function ScanPage({ params }: { params: Promise<{ sessionId: stri
       .then((data) => {
         if (cancelled) return;
         setSession(data);
-        const firstWithIssues = PROFILES.find(
+        // Default to the principle with the most critical issues
+        const firstWithIssues = WCAG_PRINCIPLES.find(
           (p) => (data.issues[p.id] || []).filter((i: AccessibilityIssue) => i.severity !== 'Pass').length > 0
         );
-        if (firstWithIssues) setActiveProfileId(firstWithIssues.id);
-        setActiveTab('critical');
+        if (firstWithIssues) setActivePrincipleId(firstWithIssues.id);
+        setActiveTab('visualize');
       })
       .catch((e) => { if (!cancelled) setError(e.message); })
       .finally(() => { if (!cancelled) setLoading(false); });
@@ -130,18 +131,22 @@ export default function ScanPage({ params }: { params: Promise<{ sessionId: stri
     );
   }
 
-  const activeProfile = PROFILES.find((p) => p.id === activeProfileId) as Profile;
-  const activeIssues = session.issues[activeProfileId] || [];
-  const criticals = activeIssues.filter((i) => i.severity === 'Critical');
-  const warnings = activeIssues.filter((i) => i.severity === 'Warning');
-  const passes = activeIssues.filter((i) => i.severity === 'Pass');
+  const activePrinciple = WCAG_PRINCIPLES.find((p) => p.id === activePrincipleId) as WcagPrinciple;
+  const activeIssues    = session.issues[activePrincipleId] || [];
+  const criticals       = activeIssues.filter((i) => i.severity === 'Critical');
+  const warnings        = activeIssues.filter((i) => i.severity === 'Warning');
+  const passes          = activeIssues.filter((i) => i.severity === 'Pass');
 
-  const totalCriticals = PROFILES.flatMap((p) => session.issues[p.id] || []).filter(
-    (i) => i.severity === 'Critical'
-  ).length;
-  const totalWarnings = PROFILES.flatMap((p) => session.issues[p.id] || []).filter(
-    (i) => i.severity === 'Warning'
-  ).length;
+  // Aggregate totals across all principles (deduplicated by title to avoid double-counting)
+  const allIssues       = Object.values(session.issues).flat();
+  const uniqueTitles    = new Set<string>();
+  const dedupedIssues   = allIssues.filter(i => {
+    if (uniqueTitles.has(i.title)) return false;
+    uniqueTitles.add(i.title);
+    return true;
+  });
+  const totalCriticals  = dedupedIssues.filter(i => i.severity === 'Critical').length;
+  const totalWarnings   = dedupedIssues.filter(i => i.severity === 'Warning').length;
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: '#0f0f1a', color: '#e5e7eb' }}>
@@ -150,28 +155,20 @@ export default function ScanPage({ params }: { params: Promise<{ sessionId: stri
         href="#main-content"
         style={{ position: 'absolute', left: '-9999px' }}
         onFocus={(e) => { e.currentTarget.style.left = '16px'; e.currentTarget.style.top = '16px'; }}
-        onBlur={(e) => { e.currentTarget.style.left = '-9999px'; }}
+        onBlur={(e)  => { e.currentTarget.style.left = '-9999px'; }}
       >
         Skip to report
       </a>
 
       {/* Header */}
-      <header
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          padding: '0 16px',
-          height: '44px',
-          borderBottom: '1px solid #1a1a2e',
-          position: 'sticky',
-          top: 0,
-          zIndex: 40,
-          backgroundColor: '#0f0f1a',
-          gap: '10px',
-          flexShrink: 0,
-        }}
-      >
-        {/* Logo */}
+      <header style={{
+        display: 'flex', alignItems: 'center',
+        padding: '0 16px', height: '44px',
+        borderBottom: '1px solid #1a1a2e',
+        position: 'sticky', top: 0, zIndex: 40,
+        backgroundColor: '#0f0f1a',
+        gap: '10px', flexShrink: 0,
+      }}>
         <button
           onClick={() => router.push('/')}
           style={{ fontFamily: '"Press Start 2P", monospace', fontSize: '11px', color: '#f59e0b', background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0, padding: 0 }}
@@ -180,7 +177,6 @@ export default function ScanPage({ params }: { params: Promise<{ sessionId: stri
           a11y.sense
         </button>
 
-        {/* URL breadcrumb */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1, minWidth: 0, overflow: 'hidden' }}>
           <span style={{ color: '#4b5563', fontSize: '13px', flexShrink: 0 }}>&gt;</span>
           <span
@@ -191,16 +187,11 @@ export default function ScanPage({ params }: { params: Promise<{ sessionId: stri
           </span>
         </div>
 
-        {/* Right controls */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-          <span
-            style={{ fontFamily: '"Press Start 2P", monospace', fontSize: '7px', color: '#ef4444', padding: '3px 8px', border: '1px solid #ef4444', borderRadius: '3px' }}
-          >
+          <span style={{ fontFamily: '"Press Start 2P", monospace', fontSize: '7px', color: '#ef4444', padding: '3px 8px', border: '1px solid #ef4444', borderRadius: '3px' }}>
             {totalCriticals} CRIT
           </span>
-          <span
-            style={{ fontFamily: '"Press Start 2P", monospace', fontSize: '7px', color: '#f59e0b', padding: '3px 8px', border: '1px solid #f59e0b', borderRadius: '3px' }}
-          >
+          <span style={{ fontFamily: '"Press Start 2P", monospace', fontSize: '7px', color: '#f59e0b', padding: '3px 8px', border: '1px solid #f59e0b', borderRadius: '3px' }}>
             {totalWarnings} WARN
           </span>
           <button
@@ -224,54 +215,89 @@ export default function ScanPage({ params }: { params: Promise<{ sessionId: stri
       {/* Body */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
 
-        {/* Sidebar */}
+        {/* ── Sidebar: WCAG principles ── */}
         <aside
-          style={{ width: '240px', borderRight: '1px solid #1a1a2e', flexShrink: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}
-          aria-label="Disability profiles"
+          style={{ width: '220px', borderRight: '1px solid #1a1a2e', flexShrink: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}
+          aria-label="WCAG principles"
         >
-          <p
-            style={{ fontFamily: '"Press Start 2P", monospace', fontSize: '7px', color: '#4b5563', padding: '14px 14px 10px', letterSpacing: '0.08em', flexShrink: 0 }}
-          >
-            SELECT PROFILE
+          <p style={{
+            fontFamily: '"Press Start 2P", monospace', fontSize: '6px',
+            color: '#4b5563', padding: '14px 14px 10px',
+            letterSpacing: '0.08em', flexShrink: 0,
+          }}>
+            WCAG PRINCIPLE
           </p>
-          {PROFILES.map((profile) => (
+          {WCAG_PRINCIPLES.map((principle) => (
             <ProfileCard
-              key={profile.id}
-              profile={profile}
-              issues={session.issues[profile.id] || []}
-              isActive={activeProfileId === profile.id}
-              onClick={() => setActiveProfileId(profile.id)}
+              key={principle.id}
+              principle={principle}
+              issues={session.issues[principle.id] || []}
+              isActive={activePrincipleId === principle.id}
+              onClick={() => { setActivePrincipleId(principle.id); setActiveTab('visualize'); }}
             />
           ))}
+
+          {/* WCAG legend at bottom of sidebar */}
+          <div style={{
+            marginTop: 'auto', padding: '14px',
+            borderTop: '1px solid #1a1a2e',
+          }}>
+            <p style={{ fontFamily: '"Press Start 2P", monospace', fontSize: '5px', color: '#374151', marginBottom: '8px', letterSpacing: '0.06em' }}>
+              WCAG 2.1 — POUR
+            </p>
+            {WCAG_PRINCIPLES.map(p => (
+              <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '5px' }}>
+                <span style={{ fontSize: '10px' }}>{p.emoji}</span>
+                <span style={{ fontSize: '10px', color: p.color, fontWeight: 600 }}>{p.label}</span>
+                <span style={{ fontSize: '9px', color: '#374151' }}>{p.guidelines}</span>
+              </div>
+            ))}
+          </div>
         </aside>
 
-        {/* Main content */}
-        <main id="main-content" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }} aria-label={`${activeProfile.label} accessibility report`}>
-
-          {/* Profile header */}
-          <div
-            style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '14px 24px', borderBottom: '1px solid #1a1a2e', flexShrink: 0, flexWrap: 'wrap' }}
-          >
+        {/* ── Main content ── */}
+        <main
+          id="main-content"
+          style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}
+          aria-label={`${activePrinciple.label} accessibility report`}
+        >
+          {/* Principle header */}
+          <div style={{
+            display: 'flex', alignItems: 'flex-start', gap: '16px',
+            padding: '16px 24px', borderBottom: '1px solid #1a1a2e',
+            flexShrink: 0, flexWrap: 'wrap',
+          }}>
             {/* Icon */}
             <div
-              style={{ width: '42px', height: '42px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: `${activeProfile.color}22`, border: `1px solid ${activeProfile.color}44`, borderRadius: '6px', fontSize: '20px', flexShrink: 0 }}
+              style={{
+                width: '42px', height: '42px', flexShrink: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                backgroundColor: `${activePrinciple.color}22`,
+                border: `1px solid ${activePrinciple.color}44`,
+                borderRadius: '6px', fontSize: '20px',
+              }}
               aria-hidden="true"
             >
-              {activeProfile.emoji}
+              {activePrinciple.emoji}
             </div>
 
-            {/* Name + description */}
-            <div style={{ flex: 1, minWidth: '160px' }}>
-              <h2 style={{ fontFamily: '"Press Start 2P", monospace', fontSize: '12px', color: '#fff', margin: 0, lineHeight: 1.3 }}>
-                {activeProfile.label} Profile
-              </h2>
-              <p style={{ fontSize: '12px', color: '#6b7280', margin: '5px 0 0', lineHeight: 1.4 }}>
-                {activeProfile.description}
+            {/* Title + description */}
+            <div style={{ flex: 1, minWidth: '180px' }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px', flexWrap: 'wrap' }}>
+                <h2 style={{ fontFamily: '"Press Start 2P", monospace', fontSize: '12px', color: '#fff', margin: 0, lineHeight: 1.3 }}>
+                  {activePrinciple.label}
+                </h2>
+                <span style={{ fontFamily: '"Press Start 2P", monospace', fontSize: '7px', color: activePrinciple.color, opacity: 0.7 }}>
+                  WCAG {activePrinciple.guidelines}
+                </span>
+              </div>
+              <p style={{ fontSize: '12px', color: '#6b7280', margin: '5px 0 0', lineHeight: 1.5, maxWidth: '480px' }}>
+                {activePrinciple.tagline}
               </p>
             </div>
 
             {/* Stats */}
-            <div style={{ display: 'flex', gap: '28px', textAlign: 'center', flexShrink: 0 }}>
+            <div style={{ display: 'flex', gap: '24px', textAlign: 'center', flexShrink: 0 }}>
               <div>
                 <div style={{ fontSize: '26px', fontWeight: 700, color: '#ef4444', lineHeight: 1 }}>{criticals.length}</div>
                 <div style={{ fontFamily: '"Press Start 2P", monospace', fontSize: '6px', color: '#6b7280', marginTop: '5px', letterSpacing: '0.04em' }}>CRITICAL</div>
@@ -285,24 +311,23 @@ export default function ScanPage({ params }: { params: Promise<{ sessionId: stri
                 <div style={{ fontFamily: '"Press Start 2P", monospace', fontSize: '6px', color: '#6b7280', marginTop: '5px', letterSpacing: '0.04em' }}>PASSES</div>
               </div>
             </div>
-
-            {/* Generate Perspective */}
-            <button
-              onClick={() => setShowSimulation(true)}
-              style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px', backgroundColor: '#10b981', color: '#fff', fontFamily: '"Press Start 2P", monospace', fontSize: '8px', border: 'none', borderRadius: '6px', cursor: 'pointer', flexShrink: 0, lineHeight: 1.4 }}
-              aria-label={`Generate ${activeProfile.label} perspective simulation`}
-            >
-              ▶ Generate Perspective
-            </button>
           </div>
 
-          {/* Tabs */}
+          {/* ── Top-level tabs: PROBLEMS | VISUALIZE ── */}
           <div style={{ display: 'flex', borderBottom: '1px solid #1a1a2e', padding: '0 24px', gap: '4px' }}>
             {([
-              { id: 'critical' as IssueTab, label: 'CRITICAL', count: criticals.length, color: '#ef4444' },
-              { id: 'warning' as IssueTab, label: 'WARNINGS', count: warnings.length, color: '#f59e0b' },
-              { id: 'pass' as IssueTab, label: 'PASSES', count: passes.length, color: '#10b981' },
-              { id: 'visualize' as IssueTab, label: 'VISUALIZE', count: null, color: '#6366f1' },
+              {
+                id:    'visualize' as MainTab,
+                label: 'VISUALIZE',
+                count: null,
+                color: activePrinciple.color,
+              },
+              {
+                id:    'problems'  as MainTab,
+                label: 'PROBLEMS',
+                count: criticals.length + warnings.length,
+                color: criticals.length > 0 ? '#ef4444' : '#f59e0b',
+              },
             ]).map((tab) => {
               const isActive = activeTab === tab.id;
               return (
@@ -310,12 +335,9 @@ export default function ScanPage({ params }: { params: Promise<{ sessionId: stri
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
+                    display: 'flex', alignItems: 'center', gap: '8px',
                     padding: '12px 16px',
-                    background: 'none',
-                    border: 'none',
+                    background: 'none', border: 'none',
                     borderBottom: isActive ? `2px solid ${tab.color}` : '2px solid transparent',
                     marginBottom: '-1px',
                     cursor: 'pointer',
@@ -328,17 +350,13 @@ export default function ScanPage({ params }: { params: Promise<{ sessionId: stri
                 >
                   {tab.label}
                   {tab.count !== null && (
-                    <span
-                      style={{
-                        fontSize: '9px',
-                        fontFamily: '"Press Start 2P", monospace',
-                        color: isActive ? '#fff' : '#4b5563',
-                        backgroundColor: isActive ? tab.color : '#1a1a2e',
-                        padding: '2px 6px',
-                        borderRadius: '3px',
-                        lineHeight: 1.5,
-                      }}
-                    >
+                    <span style={{
+                      fontSize: '9px',
+                      fontFamily: '"Press Start 2P", monospace',
+                      color: isActive ? '#fff' : '#4b5563',
+                      backgroundColor: isActive ? tab.color : '#1a1a2e',
+                      padding: '2px 6px', borderRadius: '3px', lineHeight: 1.5,
+                    }}>
                       {tab.count}
                     </span>
                   )}
@@ -347,27 +365,95 @@ export default function ScanPage({ params }: { params: Promise<{ sessionId: stri
             })}
           </div>
 
-          {/* Tab content */}
-          <div style={{ padding: '16px 24px 32px' }}>
-            {activeTab === 'critical' && (
-              criticals.length === 0
-                ? <EmptyState label="No critical issues" />
-                : criticals.map((issue, i) => <IssueRow key={i} issue={issue} index={i} />)
+          {/* ── Tab content ── */}
+          <div style={{ padding: '16px 24px 32px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+
+            {/* PROBLEMS: three expandable accordion sections */}
+            {activeTab === 'problems' && (
+              <>
+                {([
+                  { key: 'critical', label: 'Critical',  color: '#ef4444', items: criticals, emptyLabel: `No critical ${activePrinciple.label} issues` },
+                  { key: 'warning',  label: 'Warnings',  color: '#f59e0b', items: warnings,  emptyLabel: `No ${activePrinciple.label} warnings` },
+                  { key: 'passing',  label: 'Passing',   color: '#10b981', items: passes,    emptyLabel: 'No passing checks recorded' },
+                ] as const).map(({ key, label, color, items, emptyLabel }) => {
+                  const open = openSections[key] ?? false;
+                  return (
+                    <div
+                      key={key}
+                      style={{
+                        border: `1px solid ${open ? color + '44' : '#1a1a2e'}`,
+                        borderRadius: '8px',
+                        overflow: 'hidden',
+                        transition: 'border-color 0.2s',
+                      }}
+                    >
+                      {/* Accordion header */}
+                      <button
+                        onClick={() => setOpenSections(prev => ({ ...prev, [key]: !prev[key] }))}
+                        aria-expanded={open}
+                        style={{
+                          width: '100%', display: 'flex', alignItems: 'center', gap: '12px',
+                          padding: '14px 16px',
+                          background: open ? `${color}0d` : '#1a1a2e',
+                          border: 'none', cursor: 'pointer',
+                          transition: 'background 0.2s',
+                          textAlign: 'left',
+                        }}
+                      >
+                        <span style={{
+                          width: '8px', height: '8px', borderRadius: '50%',
+                          backgroundColor: color, flexShrink: 0,
+                        }} />
+                        <span style={{
+                          fontFamily: '"Press Start 2P", monospace', fontSize: '8px',
+                          color: open ? color : '#9ca3af', flex: 1,
+                          transition: 'color 0.2s',
+                        }}>
+                          {label}
+                        </span>
+                        <span style={{
+                          fontFamily: '"Press Start 2P", monospace', fontSize: '8px',
+                          color: open ? '#fff' : '#4b5563',
+                          backgroundColor: open ? color : '#111827',
+                          padding: '3px 8px', borderRadius: '3px', lineHeight: 1.5,
+                          transition: 'background 0.2s, color 0.2s',
+                        }}>
+                          {items.length}
+                        </span>
+                        <span style={{
+                          color: '#4b5563', fontSize: '14px', flexShrink: 0,
+                          transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
+                          transition: 'transform 0.2s',
+                          lineHeight: 1,
+                        }} aria-hidden="true">
+                          ▾
+                        </span>
+                      </button>
+
+                      {/* Accordion body — slides in */}
+                      <div style={{
+                        maxHeight: open ? '9999px' : '0',
+                        overflow: 'hidden',
+                        transition: open ? 'max-height 0.35s ease' : 'max-height 0.2s ease',
+                      }}>
+                        <div style={{ padding: '4px 16px 16px' }}>
+                          {items.length === 0
+                            ? <EmptyState label={emptyLabel} />
+                            : items.map((issue, i) => <IssueRow key={i} issue={issue} index={i} />)
+                          }
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </>
             )}
-            {activeTab === 'warning' && (
-              warnings.length === 0
-                ? <EmptyState label="No warnings" />
-                : warnings.map((issue, i) => <IssueRow key={i} issue={issue} index={i} />)
-            )}
-            {activeTab === 'pass' && (
-              passes.length === 0
-                ? <EmptyState label="No passing checks" />
-                : passes.map((issue, i) => <IssueRow key={i} issue={issue} index={i} />)
-            )}
+
+            {/* VISUALIZE */}
             {activeTab === 'visualize' && (
               <VisualizeTab
-                key={activeProfileId}
-                profile={activeProfile}
+                key={activePrincipleId}
+                principle={activePrinciple}
                 issues={activeIssues}
                 sessionId={sessionId}
                 hasScreenshot={session.hasScreenshot}
@@ -379,22 +465,17 @@ export default function ScanPage({ params }: { params: Promise<{ sessionId: stri
           </div>
         </main>
       </div>
-
-      {showSimulation && (
-        <SimulationView
-          profile={activeProfile}
-          sessionId={sessionId}
-          hasScreenshot={session?.hasScreenshot ?? false}
-          onClose={() => setShowSimulation(false)}
-        />
-      )}
     </div>
   );
 }
 
 function EmptyState({ label }: { label: string }) {
   return (
-    <div style={{ textAlign: 'center', padding: '48px 0', color: '#4b5563', border: '1px dashed #2a2a4a', borderRadius: '8px', fontFamily: '"Press Start 2P", monospace', fontSize: '9px' }}>
+    <div style={{
+      textAlign: 'center', padding: '48px 0',
+      color: '#4b5563', border: '1px dashed #2a2a4a',
+      borderRadius: '8px', fontFamily: '"Press Start 2P", monospace', fontSize: '9px',
+    }}>
       {label}
     </div>
   );
