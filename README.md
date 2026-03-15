@@ -124,10 +124,11 @@ Building a11y.sense gave us a deep appreciation for the craft of AI prompt engin
 
 ## Built By
 
-<!-- INSERT TEAM NAMES / LINKS HERE -->
-github.com/ebad66
-github.com/aayanA6
-github.com/Shay350
+| | GitHub | LinkedIn |
+|---|---|---|
+| **Ebad Ahmad** | [github.com/ebad66](https://github.com/ebad66) | [linkedin.com/in/ebadahmad](https://linkedin.com/in/ebadahmad) |
+| **Aayan Atif** | [github.com/aayanA6](https://github.com/aayanA6) | [linkedin.com/in/aayanatif](https://linkedin.com/in/aayanatif) |
+| **Shayan Syed** | [github.com/Shay350](https://github.com/Shay350) | [linkedin.com/in/shayansyed1](https://linkedin.com/in/shayansyed1) |
 
 
 Made with conviction at **GenAIGenesis**.
