@@ -1,6 +1,8 @@
 import React from 'react';
 import { VisualizerIssue } from '@/visualization/types';
+import { BodyRegion } from '@/visualization/types';
 import { HandoffPanel } from './HandoffPanel';
+import { JourneyTester } from './JourneyTester';
 
 interface IssuePanelProps {
   issue: VisualizerIssue | null;
@@ -8,13 +10,22 @@ interface IssuePanelProps {
   principleIssues: VisualizerIssue[];
   sessionUrl: string;
   pageTitle: string;
+  activeRegion: BodyRegion | null;
 }
 
-export function IssuePanel({ issue, onClose, principleIssues, sessionUrl, pageTitle }: IssuePanelProps) {
+export function IssuePanel({ issue, onClose, principleIssues, sessionUrl, pageTitle, activeRegion }: IssuePanelProps) {
+  if (activeRegion === 'Navigation') {
+    return (
+      <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', height: '100%', overflowY: 'auto', backgroundColor: '#0f0f1a' }}>
+        <JourneyTester targetUrl={sessionUrl} />
+      </div>
+    );
+  }
+
   if (!issue) {
     return (
       <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', height: '100%', alignItems: 'center', justifyContent: 'center', color: '#6b7280', fontSize: '11px', textAlign: 'center' }}>
-        <p>Select an issue from the diagnostics panel to view details.</p>
+        <p>Select a diagnostic from the left rail to inspect details.</p>
       </div>
     );
   }

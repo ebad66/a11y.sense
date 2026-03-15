@@ -12,4 +12,4 @@ export interface VisualizerIssue {
   principle: WCAGPrinciple;
 }
 
-export type BodyRegion = 'EyesEars' | 'Hands' | 'Brain' | 'Spine';
+export type BodyRegion = 'EyesEars' | 'Hands' | 'Brain' | 'Spine' | 'Navigation';

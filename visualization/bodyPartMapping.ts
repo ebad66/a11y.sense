@@ -6,7 +6,8 @@ export const REGION_MESHES: Record<BodyRegion, string[]> = {
   EyesEars: ['EyeLeft', 'EyeRight', 'EarLeft', 'EarRight', 'Head'], // We'll highlight parts of the head if specific eyes/ears aren't found
   Hands: ['HandLeft', 'HandRight', 'ArmLeft', 'ArmRight', 'Fingers'],
   Brain: ['Brain', 'Cranium', 'HeadTop'],
-  Spine: ['Spine1', 'Spine2', 'Spine3', 'Neck', 'NervousSystem']
+  Spine: ['Spine1', 'Spine2', 'Spine3', 'Neck', 'NervousSystem'],
+  Navigation: []
 };
 
 export const PRINCIPLE_TO_REGION: Record<WCAGPrinciple, BodyRegion> = {

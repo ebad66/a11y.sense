@@ -17,7 +17,9 @@ const REGION_IMPACT: Record<BodyRegion, {
   principle: string;
   color: string;
   bubbles: { text: string; bx: number; by: number; delay: number }[];
-  stat: { main: string; label: string; sub: string; ring: number };
+  stat: { main: string; caption: string; label: string; sub: string; ring: number };
+  metricLabel: string;
+  metricValue?: number;
 }> = {
   EyesEars: {
     principle: 'Perceivable',
@@ -27,7 +29,8 @@ const REGION_IMPACT: Record<BodyRegion, {
       { text: '👂  1.5B people have some degree of hearing loss',   bx: 63, by: 40, delay: 150 },
       { text: '🌍  15% of the global population is affected',       bx: 4,  by: 60, delay: 300 },
     ],
-    stat: { main: '2.2B', label: 'People affected', sub: 'visual & hearing impairments worldwide', ring: 73 },
+    stat: { main: '2.2B', caption: 'affected', label: 'People affected', sub: 'visual & hearing impairments worldwide', ring: 73 },
+    metricLabel: 'Severity',
   },
   Hands: {
     principle: 'Operable',
@@ -37,7 +40,20 @@ const REGION_IMPACT: Record<BodyRegion, {
       { text: '⌨️  16% rely on keyboard-only navigation',            bx: 4,  by: 46, delay: 150 },
       { text: '🚪  71% leave inaccessible sites immediately',         bx: 3,  by: 66, delay: 300 },
     ],
-    stat: { main: '1.3B', label: 'People affected', sub: 'motor & mobility impairments', ring: 60 },
+    stat: { main: '1.3B', caption: 'affected', label: 'People affected', sub: 'motor & mobility impairments', ring: 60 },
+    metricLabel: 'Severity',
+  },
+  Navigation: {
+    principle: 'Navigation',
+    color: '#38bdf8',
+    bubbles: [
+      { text: '⌨️  Keyboard paths expose blockers before users encounter them', bx: 64, by: 20, delay: 0 },
+      { text: '🧭  Predictable routing and clear focus state are core navigation signals', bx: 63, by: 44, delay: 150 },
+      { text: '↩️  Unexpected route changes break confidence fast on critical tasks', bx: 62, by: 66, delay: 300 },
+    ],
+    stat: { main: '3', caption: 'flows', label: 'Journey templates', sub: 'checkout, sign-up, and appointment paths', ring: 78 },
+    metricLabel: 'Journey coverage',
+    metricValue: 88,
   },
   Brain: {
     principle: 'Understandable',
@@ -47,7 +63,8 @@ const REGION_IMPACT: Record<BodyRegion, {
       { text: '⚡  1 in 10 people globally has ADHD',                 bx: 64, by: 35, delay: 150 },
       { text: '📖  15–20% of the world has learning disabilities',    bx: 4,  by: 62, delay: 300 },
     ],
-    stat: { main: '780M', label: 'Dyslexic users', sub: 'need readable, clear content', ring: 85 },
+    stat: { main: '780M', caption: 'affected', label: 'Dyslexic users', sub: 'need readable, clear content', ring: 85 },
+    metricLabel: 'Severity',
   },
   Spine: {
     principle: 'Robust',
@@ -57,7 +74,8 @@ const REGION_IMPACT: Record<BodyRegion, {
       { text: '🔊  7.6M screen reader users in the US alone',         bx: 63, by: 37, delay: 150 },
       { text: '📡  AT market worth $26B globally',                    bx: 4,  by: 60, delay: 300 },
     ],
-    stat: { main: '1B+', label: 'AT users affected', sub: 'rely on screen readers & assistive tech', ring: 91 },
+    stat: { main: '1B+', caption: 'affected', label: 'AT users affected', sub: 'rely on screen readers & assistive tech', ring: 91 },
+    metricLabel: 'Severity',
   },
 };
 
@@ -142,6 +160,11 @@ export function VisualizerDashboard({ issuesMap, sessionUrl, pageTitle }: Visual
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
   const [bubbleKey, setBubbleKey] = useState(0);
 
+  const handleRegionSelect = (region: BodyRegion | null) => {
+    setActiveRegion(region);
+    setSelectedIssueId(null);
+  };
+
   // Re-mount bubbles on every region change so the float-in animation replays
   useEffect(() => {
     setBubbleKey(k => k + 1);
@@ -197,6 +220,7 @@ export function VisualizerDashboard({ issuesMap, sessionUrl, pageTitle }: Visual
   // Severity % for the active principle — weighted: Critical=1.0, Warning=0.5, Minor=0.25
   const severityPct = useMemo(() => {
     if (!activeRegion) return 0;
+    if (activeRegion === 'Navigation') return REGION_IMPACT.Navigation.metricValue ?? 0;
     const principle = REGION_IMPACT[activeRegion].principle;
     const regionIssues = allIssues.filter(i => i.principle === principle);
     if (regionIssues.length === 0) return 0;
@@ -216,7 +240,7 @@ export function VisualizerDashboard({ issuesMap, sessionUrl, pageTitle }: Visual
         <WCAGPanels 
           issues={allIssues}
           activeRegion={activeRegion}
-          onRegionSelect={setActiveRegion}
+          onRegionSelect={handleRegionSelect}
           selectedIssueId={selectedIssueId}
           onIssueSelect={setSelectedIssueId}
         />
@@ -229,7 +253,7 @@ export function VisualizerDashboard({ issuesMap, sessionUrl, pageTitle }: Visual
                <SkeletonViewer 
                  issues={allIssues} 
                  activeRegion={activeRegion}
-                 onRegionSelect={setActiveRegion}
+                 onRegionSelect={(region) => handleRegionSelect(region)}
                />
             </React.Suspense>
          </Canvas>
@@ -240,7 +264,7 @@ export function VisualizerDashboard({ issuesMap, sessionUrl, pageTitle }: Visual
                A11Y.SENSE VISUALIZER
             </h2>
             <p style={{ color: '#9ca3af', fontSize: '11px', marginTop: '8px' }}>
-               Interact with body systems to isolate issues.
+               Interact with body systems and journey diagnostics to isolate issues.
             </p>
          </div>
 
@@ -330,7 +354,7 @@ export function VisualizerDashboard({ issuesMap, sessionUrl, pageTitle }: Visual
                        {impact.stat.main}
                      </text>
                      <text x="46" y="55" textAnchor="middle" fill="#6b7280" fontSize="8" fontFamily="system-ui">
-                       affected
+                       {impact.stat.caption}
                      </text>
                    </svg>
 
@@ -345,9 +369,9 @@ export function VisualizerDashboard({ issuesMap, sessionUrl, pageTitle }: Visual
                  </div>
 
                  {/* Severity bar */}
-                 <div style={{ marginTop: '16px' }}>
-                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
-                     <span style={{ fontSize: '10px', color: '#6b7280' }}>Severity</span>
+                   <div style={{ marginTop: '16px' }}>
+                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                     <span style={{ fontSize: '10px', color: '#6b7280' }}>{impact.metricLabel}</span>
                      <span style={{ fontSize: '10px', fontWeight: 600, color: impact.color }}>{severityPct}%</span>
                    </div>
                    <div style={{ height: '5px', background: '#1a1a2e', borderRadius: '3px', overflow: 'hidden' }}>
@@ -375,6 +399,7 @@ export function VisualizerDashboard({ issuesMap, sessionUrl, pageTitle }: Visual
           principleIssues={principleIssues}
           sessionUrl={sessionUrl}
           pageTitle={pageTitle}
+          activeRegion={activeRegion}
         />
       </div>
 

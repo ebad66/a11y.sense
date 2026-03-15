@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (body.mode !== 'keyboard-only') {
-      return NextResponse.json({ error: 'Only keyboard-only mode is supported in MVP' }, { status: 400 });
+      return NextResponse.json({ error: 'Only keyboard-only mode is currently supported.' }, { status: 400 });
     }
 
     const definition = JOURNEY_DEFINITIONS[body.templateId];
