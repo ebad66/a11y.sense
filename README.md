@@ -1,6 +1,6 @@
 # a11y.sense
 
-![a11y.sense landing page](1773574552190_Screenshot_2026-03-15_063316.png)
+![a11y.sense landing page](public/Screenshot%202026-03-15%20063316.png)
 
 > *"Something like 99% of all websites have accessibility issues. Assume there's something wrong and you're probably right."*
 > — Disabled Reddit user
@@ -19,11 +19,11 @@ Paste a URL. Get a full accessibility audit mapped to WCAG principles. See every
 
 ## The Visualizer
 
-![a11y.sense visualizer — Perceivable view](1773574552189_Screenshot_2026-03-15_063422.png)
+![a11y.sense visualizer — Perceivable view](public/Screenshot%202026-03-15%20063422.png)
 
 Every issue is mapped to the body system it affects. **Perceivable** lights up the skull and sensory anatomy. **Operable** targets the hands. **Understandable** hits the brain. **Robust** traces the nervous system. Click any body part to drill into the exact issues, the affected users, and the fix.
 
-![a11y.sense visualizer — Robust / Nervous System view](1773574552188_Screenshot_2026-03-15_063540.png)
+![a11y.sense visualizer — Robust / Nervous System view](public/Screenshot%202026-03-15%20063540.png)
 
 Each issue panel shows you:
 - The **WCAG principle and success criterion** it violates
@@ -36,7 +36,7 @@ Each issue panel shows you:
 
 ## Developer Handoff
 
-![Dev Handoff — markdown export](1773574552187_Screenshot_2026-03-15_063645.png)
+![Dev Handoff — markdown export](public/Screenshot%202026-03-15%20063645.png)
 
 When you're done auditing, generate a **developer-ready `.md` report** per WCAG principle. Copy it straight into a GitHub issue or download it for your PR. Zero friction from audit to fix.
 
