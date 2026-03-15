@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, FormEvent } from 'react';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 const WCAG_PRINCIPLES = [
   { id: 'Perceivable',    emoji: '👁️',  label: 'Perceivable',    color: '#6366f1' },
@@ -67,12 +68,14 @@ export default function HomePage() {
 
       {/* Header */}
       <div className="text-center mb-12 max-w-2xl">
-        <div
-          className="text-4xl mb-4"
-          aria-hidden="true"
-          style={{ letterSpacing: '-2px' }}
-        >
-          🔍
+        <div className="mb-4" aria-hidden="true">
+          <Image
+            src="/a11y_sense_icon.png"
+            alt=""
+            width={72}
+            height={72}
+            style={{ margin: '0 auto' }}
+          />
         </div>
         <h1
           className="mb-4 text-white leading-tight"
