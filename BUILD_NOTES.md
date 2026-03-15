@@ -45,3 +45,10 @@
 4. `feat(ui): polish landing experience and trust messaging`
 5. `test: add unit tests and quality scripts`
 6. `docs: rewrite README for product credibility`
+
+## 2026-03-15 — Docs pass (README rewrite)
+
+- Replaced Next.js boilerplate README with product-focused documentation for **a11y.sense**.
+- Added: product pitch, key features, architecture, local setup, env vars, command reference, API surface, demo flow, and known limitations.
+- Updated `TODO_SHIP.md`: marked "Rewrite README to match shipped product" as complete.
+- Validation: `npm run build` ✅ (Next.js production build completed successfully).

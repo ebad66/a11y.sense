@@ -26,5 +26,5 @@
 - [ ] Add lint + typecheck + test scripts
 - [ ] Add targeted unit tests for validation + prioritization utilities
 - [ ] Run build/lint/typecheck/test and capture exact outputs
-- [ ] Rewrite README to match shipped product
+- [x] Rewrite README to match shipped product
 - [ ] Final PR handoff summary (changes, risks, run commands, PR copy)
