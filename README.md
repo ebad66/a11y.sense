@@ -125,6 +125,10 @@ Building a11y.sense gave us a deep appreciation for the craft of AI prompt engin
 ## Built By
 
 <!-- INSERT TEAM NAMES / LINKS HERE -->
+github.com/ebad66
+github.com/aayanA6
+github.com/Shay350
+
 
 Made with conviction at **GenAIGenesis**.
 
