@@ -8,47 +8,95 @@
   - `git pull --ff-only`
   - `npm install`
   - `npm run build` ✅
-- Parallel audit agents launched across:
-  - Product / UX flow
-  - Frontend architecture
-  - Backend scan pipeline
-  - Accessibility credibility
-  - Performance / reliability
-  - Visual design / trust / demo-worthiness (in progress)
-  - Testing / QA / deploy readiness (in progress)
-  - README / branding / pitch quality (in progress)
+- Parallel audit agents launched across product/UX, frontend, backend pipeline, accessibility credibility, performance/reliability, visual design, QA, and README/pitch.
 
-## Audit synthesis (working summary)
+## Audit synthesis (condensed)
 
-### P0 foundations (stability + credibility)
-- Harden URL validation and API error surfaces
-- Preserve browser lifecycle guarantees in scan pipeline
-- Return stage-aware scan metadata + partial failure transparency
-- Improve session robustness guardrails (bounded in-memory retention)
-- Improve client loading/error/retry behavior consistency (no alert-based failures)
+### P0 foundations
+- Harden URL validation and API error contracts.
+- Improve scan pipeline resilience (timeouts, stage metadata, partial failure transparency).
+- Guarantee browser cleanup and reduce fragile error handling.
+- Bound in-memory session storage behavior.
 
-### P1 product polish (scan → report)
-- Landing page messaging and trust indicators
-- Report page information architecture: executive summary + prioritized queue + clearer severity framing
-- Better empty/loading/error states and reduced visual noise
-- Developer handoff export (copy/download)
+### P1 product polish
+- Improve landing page trust messaging and hierarchy.
+- Rework report IA (summary + prioritized queue + clearer issue evidence).
+- Add cleaner loading/error/retry UX.
+- Add developer handoff output.
 
-### P2 differentiation (demo leverage)
-- Before/after re-scan comparison UX
-- Evidence/confidence metadata for findings
-- Smarter issue grouping/prioritization
+### P2 differentiators
+- Add before/after re-scan comparison.
+- Add confidence/effort framing for issue prioritization.
+- Integrate persona simulation entry points in report flow.
 
-## Commit plan
-1. `chore: add build notes and ship tracker`
-2. `feat(api): harden scan pipeline, validation, and error contracts`
-3. `feat(report): add executive summary, remediation queue, and compare mode`
-4. `feat(ui): polish landing experience and trust messaging`
-5. `test: add unit tests and quality scripts`
-6. `docs: rewrite README for product credibility`
+## 2026-03-15 — Implementation pass
 
-## 2026-03-15 — Docs pass (README rewrite)
+### API / backend hardening
+- Added `lib/url.ts` for robust URL normalization + safety checks.
+- Added `lib/api.ts` for structured API error payloads and client parsing.
+- Reworked `POST /api/scan`:
+  - stage timing capture
+  - timeout wrappers
+  - explicit partial/warning metadata in response + session
+  - safer error mapping and retryable hints
+  - guaranteed browser close in `finally`
+- Updated `lib/claude.ts`:
+  - stronger issue schema (confidence, effort, rationale, affected users)
+  - retries for transient model failures
+  - principle-level fallback always returned (no silent omission)
+- Updated `lib/session.ts`:
+  - bounded in-memory behavior (evict oldest session when over cap)
+  - screenshot size guardrail
+  - persisted scan metadata shape
+- Hardened auxiliary routes:
+  - `/api/session/[sessionId]`
+  - `/api/screenshot/[sessionId]`
+  - `/api/coords/[sessionId]` (input validation + caps)
+  - `/api/simulate` (removed key preview logging)
 
-- Replaced Next.js boilerplate README with product-focused documentation for **a11y.sense**.
-- Added: product pitch, key features, architecture, local setup, env vars, command reference, API surface, demo flow, and known limitations.
-- Updated `TODO_SHIP.md`: marked "Rewrite README to match shipped product" as complete.
-- Validation: `npm run build` ✅ (Next.js production build completed successfully).
+### Frontend / product experience
+- Rewrote landing page (`app/page.tsx`) with stronger product narrative, trust cues, and clearer scan UX.
+- Reworked report page (`app/scan/[sessionId]/page.tsx`) to include:
+  - executive scorecard
+  - prioritized remediation queue
+  - before/after comparison panel
+  - structured warnings from scan metadata
+  - improved tabbed IA (overview / problems / visualize / handoff)
+  - inline re-scan error handling (no `alert` flow)
+  - integrated persona simulation launcher
+- Updated issue and principle components:
+  - `components/IssueRow.tsx`
+  - `components/ProfileCard.tsx`
+  - `components/SimulationView.tsx`
+- Theme and accessibility pass in `app/globals.css` + metadata refresh in `app/layout.tsx`.
+
+### Quality and test tooling
+- Added lint/typecheck/test scripts in `package.json`.
+- Added ESLint flat config (`eslint.config.mjs`).
+- Added Vitest setup (`vitest.config.ts`) + unit tests:
+  - `tests/url.test.ts`
+  - `tests/report.test.ts`
+
+### Documentation
+- Replaced boilerplate README with product-grade docs:
+  - feature overview
+  - architecture
+  - setup/env
+  - validation commands
+  - demo flow
+  - limitations
+
+## Validation runs
+
+- `npm run test` ✅
+  - 2 files, 8 tests passing
+- `npm run typecheck` ✅
+- `npm run lint` ✅ (warnings only; no errors)
+- `npm run build` ✅
+  - Next.js production build completed
+
+## Remaining follow-up (post-branch scope)
+
+- Durable session persistence (Redis/object storage) for multi-instance reliability.
+- Queue/concurrency control for high-volume scan workloads.
+- Deeper deterministic corroboration layer for compliance-grade severity confidence.

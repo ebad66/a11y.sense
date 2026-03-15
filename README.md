@@ -1,81 +1,84 @@
 # a11y.sense
 
-a11y.sense is an AI-assisted accessibility scan-and-visualize app for fast WCAG 2.1 triage.
+Evidence-backed accessibility analysis for live websites.
 
-Paste a URL, run a scan, and get:
-- findings grouped by **POUR** principles (Perceivable, Operable, Understandable, Robust)
-- issue-level WCAG criterion tags (e.g. `1.1.1 Non-text Content`)
-- screenshot-linked element coordinates for visual debugging
-- simulation views that help teams feel the impact of accessibility failures
+`a11y.sense` scans a URL, runs AI-assisted WCAG analysis grouped by POUR principles, maps findings to rendered page coordinates, and outputs a prioritized remediation report teams can actually act on.
 
 ---
 
 ## Why this exists
 
-Most accessibility reports are hard to prioritize and hard to explain. a11y.sense focuses on two outcomes:
+Most accessibility demos stop at generic issue lists. `a11y.sense` focuses on **developer handoff quality**:
 
-1. **Evidence-backed WCAG findings** tied to page structure and element snippets
-2. **Visual communication** (pinpoint overlays + simulation outputs) that make issues understandable to non-specialists
+- clear severity framing
+- evidence clues (selector/snippet + screenshot mapping)
+- "fix this first" prioritization
+- shareable, session-based report links
+- markdown export for engineering tickets
 
----
+It is designed to be useful for:
 
-## Key features
-
-- **Single-URL scan workflow**
-  - Home page submits URL to `POST /api/scan`
-  - Scans typically complete in ~20–40s (UI guidance)
-
-- **WCAG 2.1 structure by principle (POUR)**
-  - Audits run for all four principles in parallel
-  - Results are grouped by principle and include severity (`Critical`, `Warning`, `Pass`)
-
-- **Evidence-backed issue objects**
-  - Each issue can include:
-    - `wcag` success criterion reference
-    - affected `element` HTML snippet
-    - machine-usable `selector`
-    - actionable `fix`
-
-- **Rendered-page capture + coordinate mapping**
-  - Playwright captures full-page screenshot and rendered HTML
-  - Issues are mapped to coordinates (`xPct`, `yPct`, `wPct`, `hPct`) for report visualization
-
-- **Simulation endpoint for accessibility impact storytelling**
-  - `POST /api/simulate` supports profile-based transformations
-  - Includes a special HTML simulation path for blind profile
-
-- **Session-backed report sharing**
-  - Scan sessions are stored in-memory and retrievable via `/api/session/:sessionId`
-  - Share links point to `/scan/:sessionId` (TTL-based)
+- **Developers** (specific fixes and issue context)
+- **Product/Judges** (summary scorecard + before/after re-scan comparison)
+- **Non-experts** (structured explanations without drowning in standards jargon)
 
 ---
 
-## Architecture overview
+## Core features
 
-```text
-[Client: app/page.tsx]
-  -> POST /api/scan
-      -> Playwright capture (lib/screenshot.ts)
-      -> HTML parsing + extraction (lib/scraper.ts)
-      -> Parallel WCAG-principle audit via Gemini (lib/claude.ts)
-      -> Element coordinate resolution (same Playwright page)
-      -> In-memory session store (lib/session.ts)
-  <- sessionId + summary
+- **Live URL scan pipeline**
+  - captures rendered HTML + screenshot using Playwright
+  - analyzes across all four WCAG 2.1 POUR principles in parallel
+- **Structured issue model**
+  - severity (`Critical` / `Warning` / `Pass`)
+  - WCAG reference
+  - confidence + effort metadata
+  - rationale + affected-user hints
+- **Visual evidence workflow**
+  - issue pins mapped onto page screenshot
+  - selector/snippet-based coordinate resolution with fallback
+- **Executive report UX**
+  - scorecard
+  - prioritized remediation queue
+  - grouped findings panel
+  - developer handoff markdown output
+- **Differentiators**
+  - profile simulation entry points (blind, low vision, dyslexia, deaf, motor)
+  - before/after comparison when re-scanning from an existing report
 
-[Client: app/scan/[sessionId]/page.tsx]
-  -> GET /api/session/[sessionId]
-  -> GET /api/screenshot/[sessionId]
-  -> POST /api/simulate (on-demand)
-```
+---
 
-### Core modules
+## Architecture (high level)
 
-- `app/api/scan/route.ts`: end-to-end scan orchestration
-- `lib/screenshot.ts`: browser launch, page stabilization, screenshot, coordinate matching
-- `lib/scraper.ts`: structured extraction + condensed HTML + summary
-- `lib/claude.ts`: principle-level prompting and normalized issue output
-- `lib/session.ts`: in-memory session persistence (24h TTL)
-- `app/scan/[sessionId]/page.tsx`: report UI with problems + visualize tabs
+### Frontend (Next.js App Router)
+
+- `app/page.tsx` — landing + scan trigger
+- `app/scan/[sessionId]/page.tsx` — report experience
+- `components/VisualizeTab.tsx` — screenshot evidence view
+- `components/IssueRow.tsx` — expandable issue details
+- `components/SimulationView.tsx` — persona simulation modal
+
+### API routes
+
+- `POST /api/scan`
+  - URL validation
+  - render capture
+  - WCAG analysis
+  - coordinate mapping
+  - session creation
+- `GET /api/session/[sessionId]` — report retrieval
+- `GET /api/screenshot/[sessionId]` — screenshot bytes
+- `POST /api/coords/[sessionId]` — coordinate fallback resolver
+- `POST /api/simulate` — profile simulation generation
+
+### Core libraries
+
+- `lib/claude.ts` — Gemini-powered WCAG analysis + retries/fallbacks
+- `lib/screenshot.ts` — Playwright capture + element mapping
+- `lib/session.ts` — in-memory session store with TTL + bounds
+- `lib/report.ts` — scoring, prioritization, markdown handoff builder
+- `lib/url.ts` — URL normalization + safety checks
+- `lib/api.ts` — structured API error helpers
 
 ---
 
@@ -87,14 +90,14 @@ Most accessibility reports are hard to prioritize and hard to explain. a11y.sens
 npm install
 ```
 
-### 2) Configure environment variables
+### 2) Configure environment
 
-Create `.env.local` in the project root:
+Create `.env.local` in repo root:
 
 ```bash
-GEMINI_API_KEY=your_google_gemini_key_here
-# Optional fallback key used by simulation client
-# GOOGLE_API_KEY=your_google_api_key_here
+GEMINI_API_KEY=your_key_here
+# Optional fallback name supported by some tooling:
+# GOOGLE_API_KEY=your_key_here
 ```
 
 ### 3) Run development server
@@ -103,84 +106,51 @@ GEMINI_API_KEY=your_google_gemini_key_here
 npm run dev
 ```
 
-Open: `http://localhost:3000`
+Open <http://localhost:3000>
 
 ---
 
-## Commands
-
-### Development
+## Validation commands
 
 ```bash
-npm run dev
-```
-
-### Production build
-
-```bash
+npm run lint
+npm run typecheck
+npm run test
 npm run build
 ```
 
-### Start production server (after build)
+---
 
-```bash
-npm run start
-```
+## Recommended demo flow
 
-### Tests
-
-There is currently **no test script** in `package.json`.
+1. Start at landing page and scan a public URL.
+2. In report:
+   - show scorecard
+   - show "Fix this first" queue
+   - open Problems tab for concrete issue details
+   - open Visualize tab for screenshot evidence
+3. Trigger **Re-scan** from the report to demonstrate before/after deltas.
+4. Open **Developer handoff** tab and copy/download markdown output.
+5. Optionally run a persona simulation from Overview.
 
 ---
 
-## API surface (current)
+## Current limitations
 
-- `POST /api/scan` — create a scan session from URL
-- `GET /api/session/[sessionId]` — fetch session metadata + issues
-- `GET /api/screenshot/[sessionId]` — fetch stored screenshot bytes
-- `POST /api/simulate` — generate profile simulation for a session
-- `POST /api/coords/[sessionId]` — resolve element coordinates (utility route)
-
----
-
-## Demo flow (recommended)
-
-1. Start app with `npm run dev`
-2. Scan one of:
-   - `https://gov.uk`
-   - `https://bbc.com`
-   - `https://github.com`
-   - `https://wikipedia.org`
-3. Wait for redirect to `/scan/:sessionId`
-4. In report view:
-   - switch between POUR principles in sidebar
-   - inspect `Critical` vs `Warning` findings
-   - open **Visualize** to see mapped issue pins on screenshot
-5. Use **Share** to copy report link
-6. Click **Re-scan** to generate a fresh session and compare issue patterns manually
+- Sessions are currently **in-memory** (24h TTL), not durable across restarts/scale-out.
+- Findings are AI-assisted and should be validated with deterministic tools (axe-core, Lighthouse, manual QA) for compliance sign-off.
+- Coordinate fallback route launches a new browser process when needed (functional but not yet queue-optimized).
+- No background job queue yet for high concurrency workloads.
 
 ---
 
-## Known limitations
+## Quality and contribution notes
 
-- **In-memory sessions only**: session data is not persisted across server restarts.
-- **Single-page snapshot model**: scan is based on one captured page state, not full user journeys.
-- **AI output variance**: issue wording and count can vary between scans.
-- **Validation hardening is still in progress**: URL and error contract hardening work is tracked in `TODO_SHIP.md`.
-- **No automated tests configured yet**.
+This branch prioritizes:
 
----
+- safer URL validation + clearer API errors
+- stronger scan resilience + partial-failure transparency
+- report IA improvements and remediation-first UX
+- test/lint/typecheck/build validation scripts
 
-## Tech stack
-
-- Next.js (App Router) + React
-- Playwright (rendered capture + coordinate lookup)
-- Cheerio (HTML extraction)
-- Google Gemini APIs (text audit + image simulation)
-- TypeScript + Tailwind
-
----
-
-## Branch context
-
-Current shipping branch target: `feat/a11ysense-next-corex`
+If you contribute, keep changes small, reviewable, and validated with the commands above.
