@@ -58,7 +58,7 @@ export function WCAGPanels({ issues, activeRegion, onRegionSelect, selectedIssue
               style={{
                 width: '100%',
                 display: 'flex',
-                justifyContent: principle.id === 'Robust' ? 'center' : 'space-between',
+                justifyContent: 'space-between',
                 alignItems: 'center',
                 padding: '12px 16px',
                 background: 'none',
@@ -67,44 +67,53 @@ export function WCAGPanels({ issues, activeRegion, onRegionSelect, selectedIssue
                 cursor: 'pointer',
                 fontFamily: '"Press Start 2P", monospace',
                 fontSize: '8px',
-                textAlign: principle.id === 'Robust' ? 'center' : 'left'
+                textAlign: 'left',
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: color }} />
                 <span>{principle.label}</span>
               </div>
-              {principle.id !== 'Robust' && (
-                <span style={{ color: '#6b7280' }}>{principleIssues.length}</span>
-              )}
+              <span style={{ color: '#6b7280' }}>{principleIssues.length}</span>
             </button>
 
-            {/* Dropdown Content */}
+            {/* Dropdown Content — scrollable, separated */}
             {isActive && principleIssues.length > 0 && (
-              <div style={{ padding: '0 8px 8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                {principleIssues.map(issue => (
+              <div style={{ maxHeight: '220px', overflowY: 'auto', padding: '0 8px 8px' }}>
+                {principleIssues.map((issue, idx) => (
                   <button
                     key={issue.id}
                     onClick={(e) => { e.stopPropagation(); onIssueSelect(issue.id); }}
                     style={{
+                      width: '100%',
                       padding: '8px 12px',
                       background: selectedIssueId === issue.id ? '#2a2a4a' : 'transparent',
-                      border: '1px solid transparent',
-                      borderColor: selectedIssueId === issue.id ? color : 'transparent',
-                      borderRadius: '4px',
+                      border: 'none',
+                      borderTop: idx > 0 ? '1px solid #1e1e38' : 'none',
+                      outline: selectedIssueId === issue.id ? `1px solid ${color}` : 'none',
+                      outlineOffset: '-1px',
+                      borderRadius: selectedIssueId === issue.id ? '4px' : '0',
                       color: '#d1d5db',
                       fontSize: '11px',
                       textAlign: 'left',
                       cursor: 'pointer',
                       display: 'flex',
                       flexDirection: 'column',
-                      gap: '4px'
+                      gap: '3px',
                     }}
                   >
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                       <span style={{ fontWeight: 'bold' }}>{issue.severity}</span>
-                    </div>
-                    <span>{issue.title}</span>
+                    <span
+                      style={{
+                        fontSize: '9px',
+                        fontWeight: 700,
+                        color: issue.severity === 'Critical' ? '#ef4444' : '#f59e0b',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.05em',
+                      }}
+                    >
+                      {issue.severity}
+                    </span>
+                    <span style={{ lineHeight: 1.4 }}>{issue.title}</span>
                   </button>
                 ))}
               </div>
