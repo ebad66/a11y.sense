@@ -11,11 +11,12 @@ import { AccessibilityIssue } from '@/lib/claude';
 import { ProfileId } from '@/lib/profiles';
 
 interface VisualizerDashboardProps {
-  // Pass all the profiles' issues
   issuesMap: Record<ProfileId, AccessibilityIssue[]>;
+  sessionUrl: string;
+  pageTitle: string;
 }
 
-export function VisualizerDashboard({ issuesMap }: VisualizerDashboardProps) {
+export function VisualizerDashboard({ issuesMap, sessionUrl, pageTitle }: VisualizerDashboardProps) {
   const [activeRegion, setActiveRegion] = useState<BodyRegion | null>(null);
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
 
@@ -50,6 +51,11 @@ export function VisualizerDashboard({ issuesMap }: VisualizerDashboardProps) {
   const selectedIssue = useMemo(
     () => allIssues.find(i => i.id === selectedIssueId) || null,
     [allIssues, selectedIssueId]
+  );
+
+  const principleIssues = useMemo(
+    () => selectedIssue ? allIssues.filter(i => i.principle === selectedIssue.principle) : [],
+    [allIssues, selectedIssue]
   );
 
   return (
@@ -91,9 +97,12 @@ export function VisualizerDashboard({ issuesMap }: VisualizerDashboardProps) {
 
       {/* Right Column: Issue Details */}
       <div style={{ width: '360px', flexShrink: 0, borderLeft: '1px solid #1a1a2e', backgroundColor: '#0f0f1a' }}>
-        <IssuePanel 
+        <IssuePanel
           issue={selectedIssue}
           onClose={() => setSelectedIssueId(null)}
+          principleIssues={principleIssues}
+          sessionUrl={sessionUrl}
+          pageTitle={pageTitle}
         />
       </div>
 

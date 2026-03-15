@@ -1,12 +1,16 @@
 import React from 'react';
 import { VisualizerIssue } from '@/visualization/types';
+import { HandoffPanel } from './HandoffPanel';
 
 interface IssuePanelProps {
   issue: VisualizerIssue | null;
   onClose: () => void;
+  principleIssues: VisualizerIssue[];
+  sessionUrl: string;
+  pageTitle: string;
 }
 
-export function IssuePanel({ issue, onClose }: IssuePanelProps) {
+export function IssuePanel({ issue, onClose, principleIssues, sessionUrl, pageTitle }: IssuePanelProps) {
   if (!issue) {
     return (
       <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', height: '100%', alignItems: 'center', justifyContent: 'center', color: '#6b7280', fontSize: '11px', textAlign: 'center' }}>
@@ -74,12 +78,12 @@ export function IssuePanel({ issue, onClose }: IssuePanelProps) {
       {issue.element && (
         <div>
           <h3 style={{ fontSize: '12px', color: '#e5e7eb', textTransform: 'uppercase', marginBottom: '8px' }}>Affected Element</h3>
-          <pre style={{ 
-            backgroundColor: '#1a1a2e', 
-            padding: '12px', 
-            borderRadius: '6px', 
-            fontSize: '11px', 
-            color: '#a78bfa', 
+          <pre style={{
+            backgroundColor: '#1a1a2e',
+            padding: '12px',
+            borderRadius: '6px',
+            fontSize: '11px',
+            color: '#a78bfa',
             overflowX: 'auto',
             whiteSpace: 'pre-wrap',
             wordWrap: 'break-word',
@@ -89,6 +93,13 @@ export function IssuePanel({ issue, onClose }: IssuePanelProps) {
           </pre>
         </div>
       )}
+
+      <HandoffPanel
+        principle={issue.principle}
+        principleIssues={principleIssues}
+        sessionUrl={sessionUrl}
+        pageTitle={pageTitle}
+      />
     </div>
   );
 }

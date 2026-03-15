@@ -223,7 +223,11 @@ export default function ScanPage({ params }: { params: Promise<{ sessionId: stri
 
       {/* Body */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-         <VisualizerDashboard issuesMap={session.issues} />
+         <VisualizerDashboard
+           issuesMap={session.issues}
+           sessionUrl={session.url}
+           pageTitle={session.pageTitle}
+         />
       </div>
 
       {showSimulation && (
