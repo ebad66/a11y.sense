@@ -1,12 +1,30 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
-import { useRouter } from 'next/navigation';
-import { ProfileCard } from '@/components/ProfileCard';
+import { ReactNode, use, useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { IssueRow } from '@/components/IssueRow';
+import { ProfileCard } from '@/components/ProfileCard';
+import { SimulationView } from '@/components/SimulationView';
 import { VisualizeTab } from '@/components/VisualizeTab';
-import { WCAG_PRINCIPLES, WcagPrincipleId, WcagPrinciple } from '@/lib/wcag';
+import { readApiErrorMessage } from '@/lib/api';
 import { AccessibilityIssue } from '@/lib/claude';
+import { ProfileId, PROFILES, getProfile } from '@/lib/profiles';
+import {
+  buildDeveloperHandoffMarkdown,
+  buildPrioritizedQueue,
+  compareSummaries,
+  summarizeIssues,
+} from '@/lib/report';
+import { WCAG_PRINCIPLES, WcagPrincipleId } from '@/lib/wcag';
+
+interface ScanMeta {
+  partial: boolean;
+  warnings: string[];
+  completedStages: string[];
+  failedStages: string[];
+  stageTimingsMs: Record<string, number>;
+  principleStatus: Record<WcagPrincipleId, 'ok' | 'fallback'>;
+}
 
 interface SessionData {
   sessionId: string;
@@ -19,464 +37,684 @@ interface SessionData {
   screenshotWidth: number;
   screenshotHeight: number;
   elementCoords: Record<string, { xPct: number; yPct: number; wPct: number; hPct: number }>;
+  scanMeta?: ScanMeta;
 }
 
-type MainTab = 'problems' | 'visualize';
+type MainTab = 'overview' | 'problems' | 'visualize' | 'handoff';
+
+type SeveritySection = 'critical' | 'warning' | 'passing';
 
 export default function ScanPage({ params }: { params: Promise<{ sessionId: string }> }) {
   const { sessionId } = use(params);
+  const searchParams = useSearchParams();
+  const baselineSessionId = searchParams.get('baseline');
   const router = useRouter();
 
-  const [session,           setSession]           = useState<SessionData | null>(null);
-  const [loading,           setLoading]           = useState(true);
-  const [error,             setError]             = useState<string | null>(null);
+  const [session, setSession] = useState<SessionData | null>(null);
+  const [baseline, setBaseline] = useState<SessionData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [activePrincipleId, setActivePrincipleId] = useState<WcagPrincipleId>('perceivable');
-  const [copied,            setCopied]            = useState(false);
-  const [rescanning,        setRescanning]        = useState(false);
-  const [activeTab,         setActiveTab]         = useState<MainTab>('visualize');
-  // Which accordion sections are open inside the Problems tab
-  const [openSections, setOpenSections] = useState<Record<string, boolean>>({ critical: true, warning: false, passing: false });
+  const [activeTab, setActiveTab] = useState<MainTab>('overview');
+  const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle');
+  const [handoffCopyState, setHandoffCopyState] = useState<'idle' | 'copied'>('idle');
+  const [rescanning, setRescanning] = useState(false);
+  const [rescanError, setRescanError] = useState<string | null>(null);
+  const [openSections, setOpenSections] = useState<Record<SeveritySection, boolean>>({
+    critical: true,
+    warning: true,
+    passing: false,
+  });
+  const [simulationProfileId, setSimulationProfileId] = useState<ProfileId | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    const fetchWithRetry = async (attemptsLeft: number): Promise<SessionData> => {
-      const r    = await fetch(`/api/session/${sessionId}`);
-      const data = await r.json();
-      if (data.error) {
-        if (attemptsLeft > 1) {
-          await new Promise(res => setTimeout(res, 900));
-          if (!cancelled) return fetchWithRetry(attemptsLeft - 1);
-        }
-        throw new Error(data.error);
-      }
-      return data as SessionData;
-    };
 
-    fetchWithRetry(4)
-      .then((data) => {
+    async function loadSessionData() {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const currentSession = await fetchSessionWithRetry(sessionId, 4);
         if (cancelled) return;
-        setSession(data);
-        // Default to the principle with the most critical issues
-        const firstWithIssues = WCAG_PRINCIPLES.find(
-          (p) => (data.issues[p.id] || []).filter((i: AccessibilityIssue) => i.severity !== 'Pass').length > 0
+
+        setSession(currentSession);
+
+        const firstPrincipleWithIssues = WCAG_PRINCIPLES.find((principle) =>
+          (currentSession.issues[principle.id] || []).some((issue) => issue.severity !== 'Pass')
         );
-        if (firstWithIssues) setActivePrincipleId(firstWithIssues.id);
-        setActiveTab('visualize');
-      })
-      .catch((e) => { if (!cancelled) setError(e.message); })
-      .finally(() => { if (!cancelled) setLoading(false); });
+        if (firstPrincipleWithIssues) {
+          setActivePrincipleId(firstPrincipleWithIssues.id);
+        }
 
-    return () => { cancelled = true; };
-  }, [sessionId]);
+        if (baselineSessionId && baselineSessionId !== sessionId) {
+          const baselineSession = await fetchSessionWithRetry(baselineSessionId, 1).catch(() => null);
+          if (!cancelled) setBaseline(baselineSession);
+        } else {
+          setBaseline(null);
+        }
+      } catch (loadError) {
+        if (!cancelled) {
+          setError((loadError as Error).message);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
 
-  const handleRescan = async () => {
+    void loadSessionData();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [baselineSessionId, sessionId]);
+
+  const activePrinciple = useMemo(
+    () => WCAG_PRINCIPLES.find((principle) => principle.id === activePrincipleId) || WCAG_PRINCIPLES[0],
+    [activePrincipleId]
+  );
+
+  const summary = useMemo(() => {
+    if (!session) return null;
+    return summarizeIssues(session.issues);
+  }, [session]);
+
+  const baselineSummary = useMemo(() => {
+    if (!baseline) return null;
+    return summarizeIssues(baseline.issues);
+  }, [baseline]);
+
+  const comparison = useMemo(() => {
+    if (!summary || !baselineSummary) return null;
+    return compareSummaries(summary, baselineSummary);
+  }, [summary, baselineSummary]);
+
+  const prioritizedQueue = useMemo(() => {
+    if (!session) return [];
+    return buildPrioritizedQueue(session.issues);
+  }, [session]);
+
+  const activeIssues = session?.issues[activePrincipleId] || [];
+  const criticals = activeIssues.filter((issue) => issue.severity === 'Critical');
+  const warnings = activeIssues.filter((issue) => issue.severity === 'Warning');
+  const passes = activeIssues.filter((issue) => issue.severity === 'Pass');
+
+  const handoffMarkdown = useMemo(() => {
+    if (!session || !summary) return '';
+    return buildDeveloperHandoffMarkdown({
+      url: session.url,
+      pageTitle: session.pageTitle,
+      createdAt: session.createdAt,
+      summary,
+      queue: prioritizedQueue,
+    });
+  }, [prioritizedQueue, session, summary]);
+
+  async function handleShare() {
+    try {
+      await navigator.clipboard.writeText(`${window.location.origin}/scan/${sessionId}`);
+      setCopyState('copied');
+      setTimeout(() => setCopyState('idle'), 1500);
+    } catch {
+      setCopyState('idle');
+    }
+  }
+
+  async function handleRescan() {
     if (!session?.url || rescanning) return;
+
+    setRescanError(null);
     setRescanning(true);
+
     try {
       const response = await fetch('/api/scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: session.url }),
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error);
-      router.push(`/scan/${data.sessionId}`);
-    } catch (e) {
-      alert(`Rescan failed: ${(e as Error).message}`);
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(readApiErrorMessage(data, 'Re-scan failed.'));
+      }
+
+      router.push(`/scan/${data.sessionId}?baseline=${sessionId}`);
+    } catch (scanError) {
+      setRescanError((scanError as Error).message);
     } finally {
       setRescanning(false);
     }
-  };
+  }
 
-  const handleShare = async () => {
-    const shareUrl = `${window.location.origin}/scan/${sessionId}`;
+  async function handleCopyHandoff() {
+    if (!handoffMarkdown) return;
     try {
-      await navigator.clipboard.writeText(shareUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {}
-  };
+      await navigator.clipboard.writeText(handoffMarkdown);
+      setHandoffCopyState('copied');
+      setTimeout(() => setHandoffCopyState('idle'), 1500);
+    } catch {
+      setHandoffCopyState('idle');
+    }
+  }
+
+  function handleDownloadHandoff() {
+    if (!handoffMarkdown || !session) return;
+
+    const blob = new Blob([handoffMarkdown], { type: 'text/markdown;charset=utf-8' });
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = objectUrl;
+    link.download = `a11y-sense-handoff-${session.sessionId}.md`;
+    link.click();
+    URL.revokeObjectURL(objectUrl);
+  }
 
   if (loading) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '16px', backgroundColor: '#0f0f1a' }}>
-        <div
-          style={{ width: '32px', height: '32px', border: '4px solid #6366f1', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}
+      <div className="min-h-screen bg-[#0b1020] text-slate-100 flex flex-col items-center justify-center gap-4 px-4">
+        <span
+          className="inline-block size-8 rounded-full border-4 border-indigo-300 border-t-transparent animate-spin"
           role="status"
           aria-label="Loading scan results"
         />
-        <p style={{ fontFamily: '"Press Start 2P", monospace', fontSize: '10px', color: '#6366f1' }}>
-          Loading report...
-        </p>
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        <p className="text-sm text-slate-300">Loading report…</p>
       </div>
     );
   }
 
-  if (error || !session) {
+  if (error || !session || !summary) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '16px', padding: '32px', backgroundColor: '#0f0f1a' }}>
-        <div style={{ fontFamily: '"Press Start 2P", monospace', fontSize: '32px', color: '#ef4444' }}>404</div>
-        <h1 style={{ fontFamily: '"Press Start 2P", monospace', fontSize: '12px', color: '#fff', textAlign: 'center' }}>Session not found</h1>
-        <p style={{ color: '#6b7280', fontSize: '14px', textAlign: 'center', maxWidth: '400px' }}>
-          {error || 'This session has expired or does not exist. Sessions last 24 hours.'}
-        </p>
-        <button
-          onClick={() => router.push('/')}
-          style={{ marginTop: '16px', padding: '12px 24px', backgroundColor: '#6366f1', color: '#fff', fontFamily: '"Press Start 2P", monospace', fontSize: '10px', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
-        >
-          ← New Scan
-        </button>
+      <div className="min-h-screen bg-[#0b1020] text-slate-100 flex items-center justify-center px-4">
+        <div className="max-w-lg rounded-xl border border-red-500/40 bg-red-500/10 p-6 text-center">
+          <p className="text-xs uppercase tracking-wider text-red-200">Session unavailable</p>
+          <h1 className="mt-2 text-xl font-semibold text-white">Could not load this report</h1>
+          <p className="mt-3 text-sm text-red-100 leading-relaxed">
+            {error || 'This session has expired or does not exist. Session data is currently retained for 24 hours.'}
+          </p>
+          <button
+            className="mt-5 rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-400"
+            onClick={() => router.push('/')}
+          >
+            Start a new scan
+          </button>
+        </div>
       </div>
     );
   }
-
-  const activePrinciple = WCAG_PRINCIPLES.find((p) => p.id === activePrincipleId) as WcagPrinciple;
-  const activeIssues    = session.issues[activePrincipleId] || [];
-  const criticals       = activeIssues.filter((i) => i.severity === 'Critical');
-  const warnings        = activeIssues.filter((i) => i.severity === 'Warning');
-  const passes          = activeIssues.filter((i) => i.severity === 'Pass');
-
-  // Aggregate totals across all principles (deduplicated by title to avoid double-counting)
-  const allIssues       = Object.values(session.issues).flat();
-  const uniqueTitles    = new Set<string>();
-  const dedupedIssues   = allIssues.filter(i => {
-    if (uniqueTitles.has(i.title)) return false;
-    uniqueTitles.add(i.title);
-    return true;
-  });
-  const totalCriticals  = dedupedIssues.filter(i => i.severity === 'Critical').length;
-  const totalWarnings   = dedupedIssues.filter(i => i.severity === 'Warning').length;
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: '#0f0f1a', color: '#e5e7eb' }}>
-      {/* Skip nav */}
+    <div className="min-h-screen bg-[#0b1020] text-slate-100">
       <a
-        href="#main-content"
-        style={{ position: 'absolute', left: '-9999px' }}
-        onFocus={(e) => { e.currentTarget.style.left = '16px'; e.currentTarget.style.top = '16px'; }}
-        onBlur={(e)  => { e.currentTarget.style.left = '-9999px'; }}
+        href="#report-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:rounded focus:bg-indigo-600 focus:px-4 focus:py-2"
       >
-        Skip to report
+        Skip to report content
       </a>
 
-      {/* Header */}
-      <header style={{
-        display: 'flex', alignItems: 'center',
-        padding: '0 16px', height: '44px',
-        borderBottom: '1px solid #1a1a2e',
-        position: 'sticky', top: 0, zIndex: 40,
-        backgroundColor: '#0f0f1a',
-        gap: '10px', flexShrink: 0,
-      }}>
-        <button
-          onClick={() => router.push('/')}
-          style={{ fontFamily: '"Press Start 2P", monospace', fontSize: '11px', color: '#f59e0b', background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0, padding: 0 }}
-          aria-label="Go to home"
-        >
-          a11y.sense
-        </button>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1, minWidth: 0, overflow: 'hidden' }}>
-          <span style={{ color: '#4b5563', fontSize: '13px', flexShrink: 0 }}>&gt;</span>
-          <span
-            style={{ color: '#9ca3af', fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'monospace' }}
-            title={session.url}
-          >
-            {session.url}
-          </span>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-          <span style={{ fontFamily: '"Press Start 2P", monospace', fontSize: '7px', color: '#ef4444', padding: '3px 8px', border: '1px solid #ef4444', borderRadius: '3px' }}>
-            {totalCriticals} CRIT
-          </span>
-          <span style={{ fontFamily: '"Press Start 2P", monospace', fontSize: '7px', color: '#f59e0b', padding: '3px 8px', border: '1px solid #f59e0b', borderRadius: '3px' }}>
-            {totalWarnings} WARN
-          </span>
+      <header className="sticky top-0 z-30 border-b border-slate-800 bg-[#0b1020]/95 backdrop-blur-sm">
+        <div className="mx-auto max-w-7xl px-4 py-3 flex flex-wrap items-center gap-3">
           <button
-            onClick={handleShare}
-            style={{ padding: '4px 12px', fontFamily: '"Press Start 2P", monospace', fontSize: '7px', color: '#f59e0b', backgroundColor: 'transparent', border: '1px solid #f59e0b', borderRadius: '4px', cursor: 'pointer' }}
-            aria-label="Copy share link"
+            onClick={() => router.push('/')}
+            className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-slate-200 hover:border-slate-500"
           >
-            {copied ? 'Copied!' : 'Share'}
+            ← New scan
           </button>
-          <button
-            onClick={handleRescan}
-            disabled={rescanning}
-            style={{ padding: '4px 12px', fontFamily: '"Press Start 2P", monospace', fontSize: '7px', color: '#f59e0b', backgroundColor: 'transparent', border: '1px solid #f59e0b', borderRadius: '4px', cursor: rescanning ? 'wait' : 'pointer', opacity: rescanning ? 0.6 : 1 }}
-            aria-label="Re-scan URL"
-          >
-            {rescanning ? '...' : 'Re-scan'}
-          </button>
+
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] uppercase tracking-wider text-slate-400">Scanned URL</p>
+            <p className="truncate text-sm text-slate-200" title={session.url}>
+              {session.url}
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 text-xs">
+            <span className="rounded-full border border-red-400/40 bg-red-500/10 px-2.5 py-1 text-red-100">
+              {summary.criticalCount} critical
+            </span>
+            <span className="rounded-full border border-amber-400/40 bg-amber-500/10 px-2.5 py-1 text-amber-100">
+              {summary.warningCount} warnings
+            </span>
+            <button
+              onClick={handleShare}
+              className="rounded-full border border-slate-600 px-3 py-1 text-slate-200 hover:border-slate-400"
+            >
+              {copyState === 'copied' ? 'Copied' : 'Share link'}
+            </button>
+            <button
+              onClick={handleRescan}
+              disabled={rescanning}
+              className="rounded-full border border-indigo-400/60 px-3 py-1 text-indigo-100 hover:border-indigo-300 disabled:opacity-60"
+            >
+              {rescanning ? 'Re-scanning…' : 'Re-scan'}
+            </button>
+          </div>
         </div>
       </header>
 
-      {/* Body */}
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-
-        {/* ── Sidebar: WCAG principles ── */}
-        <aside
-          style={{ width: '220px', borderRight: '1px solid #1a1a2e', flexShrink: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}
-          aria-label="WCAG principles"
-        >
-          <p style={{
-            fontFamily: '"Press Start 2P", monospace', fontSize: '6px',
-            color: '#4b5563', padding: '14px 14px 10px',
-            letterSpacing: '0.08em', flexShrink: 0,
-          }}>
-            WCAG PRINCIPLE
-          </p>
-          {WCAG_PRINCIPLES.map((principle) => (
-            <ProfileCard
-              key={principle.id}
-              principle={principle}
-              issues={session.issues[principle.id] || []}
-              isActive={activePrincipleId === principle.id}
-              onClick={() => { setActivePrincipleId(principle.id); setActiveTab('visualize'); }}
-            />
-          ))}
-
-          {/* WCAG legend at bottom of sidebar */}
-          <div style={{
-            marginTop: 'auto', padding: '14px',
-            borderTop: '1px solid #1a1a2e',
-          }}>
-            <p style={{ fontFamily: '"Press Start 2P", monospace', fontSize: '5px', color: '#374151', marginBottom: '8px', letterSpacing: '0.06em' }}>
-              WCAG 2.1 — POUR
-            </p>
-            {WCAG_PRINCIPLES.map(p => (
-              <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '5px' }}>
-                <span style={{ fontSize: '10px' }}>{p.emoji}</span>
-                <span style={{ fontSize: '10px', color: p.color, fontWeight: 600 }}>{p.label}</span>
-                <span style={{ fontSize: '9px', color: '#374151' }}>{p.guidelines}</span>
-              </div>
-            ))}
+      <main id="report-content" className="mx-auto max-w-7xl px-4 py-6">
+        {rescanError && (
+          <div className="mb-4 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-100" role="alert">
+            {rescanError}
           </div>
-        </aside>
+        )}
 
-        {/* ── Main content ── */}
-        <main
-          id="main-content"
-          style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}
-          aria-label={`${activePrinciple.label} accessibility report`}
-        >
-          {/* Principle header */}
-          <div style={{
-            display: 'flex', alignItems: 'flex-start', gap: '16px',
-            padding: '16px 24px', borderBottom: '1px solid #1a1a2e',
-            flexShrink: 0, flexWrap: 'wrap',
-          }}>
-            {/* Icon */}
-            <div
-              style={{
-                width: '42px', height: '42px', flexShrink: 0,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                backgroundColor: `${activePrinciple.color}22`,
-                border: `1px solid ${activePrinciple.color}44`,
-                borderRadius: '6px', fontSize: '20px',
-              }}
-              aria-hidden="true"
-            >
-              {activePrinciple.emoji}
-            </div>
+        <section className="grid gap-4 md:grid-cols-4 mb-5">
+          <SummaryCard title="Accessibility score" value={`${summary.score}/100`} tone="indigo" subtitle="Higher is better" />
+          <SummaryCard title="Critical blockers" value={String(summary.criticalCount)} tone="red" subtitle="Fix these first" />
+          <SummaryCard title="Warnings" value={String(summary.warningCount)} tone="amber" subtitle="Important usability gaps" />
+          <SummaryCard
+            title="Most impacted"
+            value={WCAG_PRINCIPLES.find((item) => item.id === summary.mostImpactedPrinciple)?.label || 'Perceivable'}
+            tone="slate"
+            subtitle="Principle with most issues"
+          />
+        </section>
 
-            {/* Title + description */}
-            <div style={{ flex: 1, minWidth: '180px' }}>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px', flexWrap: 'wrap' }}>
-                <h2 style={{ fontFamily: '"Press Start 2P", monospace', fontSize: '12px', color: '#fff', margin: 0, lineHeight: 1.3 }}>
-                  {activePrinciple.label}
-                </h2>
-                <span style={{ fontFamily: '"Press Start 2P", monospace', fontSize: '7px', color: activePrinciple.color, opacity: 0.7 }}>
-                  WCAG {activePrinciple.guidelines}
-                </span>
-              </div>
-              <p style={{ fontSize: '12px', color: '#6b7280', margin: '5px 0 0', lineHeight: 1.5, maxWidth: '480px' }}>
-                {activePrinciple.tagline}
-              </p>
-            </div>
-
-            {/* Stats */}
-            <div style={{ display: 'flex', gap: '24px', textAlign: 'center', flexShrink: 0 }}>
+        {comparison && baseline && baselineSummary && (
+          <section className="mb-5 rounded-xl border border-slate-700 bg-slate-900/60 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <div style={{ fontSize: '26px', fontWeight: 700, color: '#ef4444', lineHeight: 1 }}>{criticals.length}</div>
-                <div style={{ fontFamily: '"Press Start 2P", monospace', fontSize: '6px', color: '#6b7280', marginTop: '5px', letterSpacing: '0.04em' }}>CRITICAL</div>
+                <p className="text-xs uppercase tracking-wider text-slate-400">Before / after re-scan</p>
+                <p className="text-sm text-slate-200">
+                  Compared with session <code className="text-slate-300">{baseline.sessionId}</code>
+                </p>
               </div>
-              <div>
-                <div style={{ fontSize: '26px', fontWeight: 700, color: '#f59e0b', lineHeight: 1 }}>{warnings.length}</div>
-                <div style={{ fontFamily: '"Press Start 2P", monospace', fontSize: '6px', color: '#6b7280', marginTop: '5px', letterSpacing: '0.04em' }}>WARNINGS</div>
-              </div>
-              <div>
-                <div style={{ fontSize: '26px', fontWeight: 700, color: '#10b981', lineHeight: 1 }}>{passes.length}</div>
-                <div style={{ fontFamily: '"Press Start 2P", monospace', fontSize: '6px', color: '#6b7280', marginTop: '5px', letterSpacing: '0.04em' }}>PASSES</div>
+              <div className="flex gap-2 text-xs">
+                <DeltaChip label="Score" value={comparison.scoreDelta} positiveHigher />
+                <DeltaChip label="Critical" value={comparison.criticalDelta * -1} positiveHigher={false} />
+                <DeltaChip label="Warnings" value={comparison.warningDelta * -1} positiveHigher={false} />
               </div>
             </div>
-          </div>
+          </section>
+        )}
 
-          {/* ── Top-level tabs: PROBLEMS | VISUALIZE ── */}
-          <div style={{ display: 'flex', borderBottom: '1px solid #1a1a2e', padding: '0 24px', gap: '4px' }}>
-            {([
-              {
-                id:    'visualize' as MainTab,
-                label: 'VISUALIZE',
-                count: null,
-                color: activePrinciple.color,
-              },
-              {
-                id:    'problems'  as MainTab,
-                label: 'PROBLEMS',
-                count: criticals.length + warnings.length,
-                color: criticals.length > 0 ? '#ef4444' : '#f59e0b',
-              },
-            ]).map((tab) => {
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: '8px',
-                    padding: '12px 16px',
-                    background: 'none', border: 'none',
-                    borderBottom: isActive ? `2px solid ${tab.color}` : '2px solid transparent',
-                    marginBottom: '-1px',
-                    cursor: 'pointer',
-                    fontFamily: '"Press Start 2P", monospace',
-                    fontSize: '8px',
-                    color: isActive ? tab.color : '#4b5563',
-                    transition: 'color 0.15s',
+        {session.scanMeta?.warnings?.length ? (
+          <section className="mb-5 rounded-xl border border-amber-400/35 bg-amber-500/10 p-4">
+            <p className="text-xs uppercase tracking-wider text-amber-200">Scan warnings</p>
+            <ul className="mt-2 list-disc list-inside text-sm text-amber-100 space-y-1">
+              {session.scanMeta.warnings.map((warning) => (
+                <li key={warning}>{warning}</li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
+
+        <section className="grid gap-5 lg:grid-cols-[280px_1fr]">
+          <aside className="rounded-xl border border-slate-700 bg-slate-900/60 p-3 h-fit">
+            <p className="px-2 pb-2 text-[11px] uppercase tracking-wide text-slate-400">POUR principles</p>
+            <div className="space-y-2">
+              {WCAG_PRINCIPLES.map((principle) => (
+                <ProfileCard
+                  key={principle.id}
+                  principle={principle}
+                  issues={session.issues[principle.id] || []}
+                  isActive={activePrincipleId === principle.id}
+                  onClick={() => {
+                    setActivePrincipleId(principle.id);
+                    if (activeTab === 'handoff') return;
+                    setActiveTab('problems');
                   }}
-                  aria-selected={isActive}
-                >
-                  {tab.label}
-                  {tab.count !== null && (
-                    <span style={{
-                      fontSize: '9px',
-                      fontFamily: '"Press Start 2P", monospace',
-                      color: isActive ? '#fff' : '#4b5563',
-                      backgroundColor: isActive ? tab.color : '#1a1a2e',
-                      padding: '2px 6px', borderRadius: '3px', lineHeight: 1.5,
-                    }}>
-                      {tab.count}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
+                />
+              ))}
+            </div>
+          </aside>
 
-          {/* ── Tab content ── */}
-          <div style={{ padding: '16px 24px 32px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <section className="rounded-xl border border-slate-700 bg-slate-900/60">
+            <div className="border-b border-slate-700 px-4 pt-4">
+              <h1 className="text-lg font-semibold text-white">{session.pageTitle || session.url}</h1>
+              <p className="mt-1 text-sm text-slate-300">
+                {activePrinciple.label}: {activePrinciple.tagline}
+              </p>
 
-            {/* PROBLEMS: three expandable accordion sections */}
-            {activeTab === 'problems' && (
-              <>
-                {([
-                  { key: 'critical', label: 'Critical',  color: '#ef4444', items: criticals, emptyLabel: `No critical ${activePrinciple.label} issues` },
-                  { key: 'warning',  label: 'Warnings',  color: '#f59e0b', items: warnings,  emptyLabel: `No ${activePrinciple.label} warnings` },
-                  { key: 'passing',  label: 'Passing',   color: '#10b981', items: passes,    emptyLabel: 'No passing checks recorded' },
-                ] as const).map(({ key, label, color, items, emptyLabel }) => {
-                  const open = openSections[key] ?? false;
-                  return (
-                    <div
-                      key={key}
-                      style={{
-                        border: `1px solid ${open ? color + '44' : '#1a1a2e'}`,
-                        borderRadius: '8px',
-                        overflow: 'hidden',
-                        transition: 'border-color 0.2s',
-                      }}
-                    >
-                      {/* Accordion header */}
-                      <button
-                        onClick={() => setOpenSections(prev => ({ ...prev, [key]: !prev[key] }))}
-                        aria-expanded={open}
-                        style={{
-                          width: '100%', display: 'flex', alignItems: 'center', gap: '12px',
-                          padding: '14px 16px',
-                          background: open ? `${color}0d` : '#1a1a2e',
-                          border: 'none', cursor: 'pointer',
-                          transition: 'background 0.2s',
-                          textAlign: 'left',
-                        }}
-                      >
-                        <span style={{
-                          width: '8px', height: '8px', borderRadius: '50%',
-                          backgroundColor: color, flexShrink: 0,
-                        }} />
-                        <span style={{
-                          fontFamily: '"Press Start 2P", monospace', fontSize: '8px',
-                          color: open ? color : '#9ca3af', flex: 1,
-                          transition: 'color 0.2s',
-                        }}>
-                          {label}
-                        </span>
-                        <span style={{
-                          fontFamily: '"Press Start 2P", monospace', fontSize: '8px',
-                          color: open ? '#fff' : '#4b5563',
-                          backgroundColor: open ? color : '#111827',
-                          padding: '3px 8px', borderRadius: '3px', lineHeight: 1.5,
-                          transition: 'background 0.2s, color 0.2s',
-                        }}>
-                          {items.length}
-                        </span>
-                        <span style={{
-                          color: '#4b5563', fontSize: '14px', flexShrink: 0,
-                          transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
-                          transition: 'transform 0.2s',
-                          lineHeight: 1,
-                        }} aria-hidden="true">
-                          ▾
-                        </span>
-                      </button>
+              <div role="tablist" aria-label="Report views" className="mt-4 flex flex-wrap gap-2 pb-3">
+                <TabButton active={activeTab === 'overview'} onClick={() => setActiveTab('overview')}>
+                  Overview
+                </TabButton>
+                <TabButton active={activeTab === 'problems'} onClick={() => setActiveTab('problems')}>
+                  Problems ({criticals.length + warnings.length})
+                </TabButton>
+                <TabButton active={activeTab === 'visualize'} onClick={() => setActiveTab('visualize')}>
+                  Visualize
+                </TabButton>
+                <TabButton active={activeTab === 'handoff'} onClick={() => setActiveTab('handoff')}>
+                  Developer handoff
+                </TabButton>
+              </div>
+            </div>
 
-                      {/* Accordion body — slides in */}
-                      <div style={{
-                        maxHeight: open ? '9999px' : '0',
-                        overflow: 'hidden',
-                        transition: open ? 'max-height 0.35s ease' : 'max-height 0.2s ease',
-                      }}>
-                        <div style={{ padding: '4px 16px 16px' }}>
-                          {items.length === 0
-                            ? <EmptyState label={emptyLabel} />
-                            : items.map((issue, i) => <IssueRow key={i} issue={issue} index={i} />)
-                          }
-                        </div>
-                      </div>
+            <div className="p-4 sm:p-5">
+              {activeTab === 'overview' && (
+                <div className="space-y-5">
+                  <section className="rounded-xl border border-slate-700 bg-slate-950/50 p-4">
+                    <h2 className="text-sm font-semibold text-white">Fix this first</h2>
+                    {prioritizedQueue.length === 0 ? (
+                      <p className="mt-2 text-sm text-emerald-200">No blocking issues detected for this scan.</p>
+                    ) : (
+                      <ol className="mt-3 space-y-2">
+                        {prioritizedQueue.slice(0, 6).map((item, index) => (
+                          <li key={item.key} className="rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-2">
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                              <p className="text-sm text-slate-100 font-medium">
+                                {index + 1}. {item.issue.title}
+                              </p>
+                              <span className="text-[11px] rounded-full border border-slate-600 px-2 py-0.5 text-slate-300">
+                                Score {Math.round(item.priorityScore)}
+                              </span>
+                            </div>
+                            <p className="mt-1 text-xs text-slate-300">
+                              {item.issue.severity} • {item.evidence} • Confidence {item.confidence} • Effort {item.effort}
+                            </p>
+                            <p className="mt-1 text-xs text-slate-400">{item.rationale}</p>
+                          </li>
+                        ))}
+                      </ol>
+                    )}
+                  </section>
+
+                  <section className="rounded-xl border border-slate-700 bg-slate-950/50 p-4">
+                    <h2 className="text-sm font-semibold text-white">Persona simulations</h2>
+                    <p className="mt-1 text-xs text-slate-300">
+                      Preview how this page may be experienced by different disability profiles.
+                    </p>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                      {PROFILES.map((profile) => (
+                        <button
+                          key={profile.id}
+                          type="button"
+                          className="rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2 text-left hover:border-slate-500"
+                          onClick={() => setSimulationProfileId(profile.id)}
+                        >
+                          <p className="text-sm text-slate-100 font-medium">
+                            {profile.emoji} {profile.label}
+                          </p>
+                          <p className="mt-1 text-xs text-slate-400 leading-relaxed line-clamp-2">{profile.description}</p>
+                        </button>
+                      ))}
                     </div>
-                  );
-                })}
-              </>
-            )}
+                  </section>
+                </div>
+              )}
 
-            {/* VISUALIZE */}
-            {activeTab === 'visualize' && (
-              <VisualizeTab
-                key={activePrincipleId}
-                principle={activePrinciple}
-                issues={activeIssues}
-                sessionId={sessionId}
-                hasScreenshot={session.hasScreenshot}
-                screenshotWidth={session.screenshotWidth}
-                screenshotHeight={session.screenshotHeight}
-                elementCoords={session.elementCoords}
-              />
-            )}
-          </div>
-        </main>
-      </div>
+              {activeTab === 'problems' && (
+                <div className="space-y-3">
+                  <SeverityPanel
+                    title="Critical"
+                    count={criticals.length}
+                    open={openSections.critical}
+                    onToggle={() => setOpenSections((prev) => ({ ...prev, critical: !prev.critical }))}
+                    tone="red"
+                  >
+                    {criticals.length === 0 ? (
+                      <EmptyState label={`No critical ${activePrinciple.label} blockers`} />
+                    ) : (
+                      criticals.map((issue, index) => <IssueRow key={`${issue.title}-${index}`} issue={issue} index={index} />)
+                    )}
+                  </SeverityPanel>
+
+                  <SeverityPanel
+                    title="Warnings"
+                    count={warnings.length}
+                    open={openSections.warning}
+                    onToggle={() => setOpenSections((prev) => ({ ...prev, warning: !prev.warning }))}
+                    tone="amber"
+                  >
+                    {warnings.length === 0 ? (
+                      <EmptyState label={`No ${activePrinciple.label} warnings`} />
+                    ) : (
+                      warnings.map((issue, index) => <IssueRow key={`${issue.title}-${index}`} issue={issue} index={index} />)
+                    )}
+                  </SeverityPanel>
+
+                  <SeverityPanel
+                    title="Passing checks"
+                    count={passes.length}
+                    open={openSections.passing}
+                    onToggle={() => setOpenSections((prev) => ({ ...prev, passing: !prev.passing }))}
+                    tone="emerald"
+                  >
+                    {passes.length === 0 ? (
+                      <EmptyState label="No passing checks returned for this principle" />
+                    ) : (
+                      passes.map((issue, index) => <IssueRow key={`${issue.title}-${index}`} issue={issue} index={index} />)
+                    )}
+                  </SeverityPanel>
+                </div>
+              )}
+
+              {activeTab === 'visualize' && (
+                <VisualizeTab
+                  key={activePrincipleId}
+                  principle={activePrinciple}
+                  issues={activeIssues}
+                  sessionId={session.sessionId}
+                  hasScreenshot={session.hasScreenshot}
+                  screenshotWidth={session.screenshotWidth}
+                  screenshotHeight={session.screenshotHeight}
+                  elementCoords={session.elementCoords}
+                />
+              )}
+
+              {activeTab === 'handoff' && (
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={handleCopyHandoff}
+                      className="rounded-md border border-slate-600 px-3 py-1.5 text-xs text-slate-200 hover:border-slate-400"
+                    >
+                      {handoffCopyState === 'copied' ? 'Copied' : 'Copy markdown'}
+                    </button>
+                    <button
+                      onClick={handleDownloadHandoff}
+                      className="rounded-md border border-indigo-400/60 px-3 py-1.5 text-xs text-indigo-100 hover:border-indigo-300"
+                    >
+                      Download .md
+                    </button>
+                  </div>
+
+                  <pre className="rounded-lg border border-slate-700 bg-slate-950 p-4 text-xs text-slate-200 overflow-auto whitespace-pre-wrap max-h-[520px]">
+                    {handoffMarkdown}
+                  </pre>
+                </div>
+              )}
+            </div>
+          </section>
+        </section>
+      </main>
+
+      {simulationProfileId && (
+        <SimulationView
+          profile={getProfile(simulationProfileId)}
+          sessionId={session.sessionId}
+          hasScreenshot={session.hasScreenshot}
+          onClose={() => setSimulationProfileId(null)}
+        />
+      )}
     </div>
+  );
+}
+
+function SummaryCard({
+  title,
+  value,
+  subtitle,
+  tone,
+}: {
+  title: string;
+  value: string;
+  subtitle: string;
+  tone: 'indigo' | 'red' | 'amber' | 'slate';
+}) {
+  const toneClass =
+    tone === 'indigo'
+      ? 'border-indigo-400/40 bg-indigo-500/10 text-indigo-100'
+      : tone === 'red'
+        ? 'border-red-400/40 bg-red-500/10 text-red-100'
+        : tone === 'amber'
+          ? 'border-amber-400/40 bg-amber-500/10 text-amber-100'
+          : 'border-slate-600 bg-slate-900/70 text-slate-100';
+
+  return (
+    <article className={`rounded-xl border p-4 ${toneClass}`}>
+      <p className="text-xs uppercase tracking-wide opacity-90">{title}</p>
+      <p className="mt-2 text-2xl font-semibold">{value}</p>
+      <p className="mt-1 text-xs opacity-80">{subtitle}</p>
+    </article>
+  );
+}
+
+function DeltaChip({
+  label,
+  value,
+  positiveHigher,
+}: {
+  label: string;
+  value: number;
+  positiveHigher: boolean;
+}) {
+  const isPositive = positiveHigher ? value > 0 : value >= 0;
+  const prefix = value > 0 ? '+' : '';
+
+  return (
+    <span
+      className={`rounded-full border px-2.5 py-1 ${
+        isPositive
+          ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-100'
+          : 'border-red-400/40 bg-red-500/10 text-red-100'
+      }`}
+    >
+      {label}: {prefix}
+      {value}
+    </span>
+  );
+}
+
+function TabButton({
+  children,
+  active,
+  onClick,
+}: {
+  children: ReactNode;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      role="tab"
+      aria-selected={active}
+      onClick={onClick}
+      className={`rounded-full border px-3 py-1.5 text-xs sm:text-sm ${
+        active
+          ? 'border-indigo-400/70 bg-indigo-500/15 text-indigo-100'
+          : 'border-slate-600 text-slate-300 hover:border-slate-500'
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function SeverityPanel({
+  title,
+  count,
+  open,
+  onToggle,
+  tone,
+  children,
+}: {
+  title: string;
+  count: number;
+  open: boolean;
+  onToggle: () => void;
+  tone: 'red' | 'amber' | 'emerald';
+  children: ReactNode;
+}) {
+  const toneClass =
+    tone === 'red'
+      ? 'border-red-400/40 bg-red-500/10 text-red-100'
+      : tone === 'amber'
+        ? 'border-amber-400/40 bg-amber-500/10 text-amber-100'
+        : 'border-emerald-400/40 bg-emerald-500/10 text-emerald-100';
+
+  return (
+    <section className="rounded-xl border border-slate-700 bg-slate-950/40">
+      <button
+        type="button"
+        className="w-full px-4 py-3 flex items-center justify-between text-left"
+        onClick={onToggle}
+        aria-expanded={open}
+      >
+        <span className="text-sm font-semibold text-slate-100">{title}</span>
+        <span className={`text-xs rounded-full border px-2 py-0.5 ${toneClass}`}>
+          {count}
+        </span>
+      </button>
+      {open && <div className="px-3 pb-3">{children}</div>}
+    </section>
   );
 }
 
 function EmptyState({ label }: { label: string }) {
   return (
-    <div style={{
-      textAlign: 'center', padding: '48px 0',
-      color: '#4b5563', border: '1px dashed #2a2a4a',
-      borderRadius: '8px', fontFamily: '"Press Start 2P", monospace', fontSize: '9px',
-    }}>
+    <div className="rounded-lg border border-dashed border-slate-700 bg-slate-900/35 px-4 py-8 text-center text-sm text-slate-400">
       {label}
     </div>
   );
+}
+
+async function fetchSessionWithRetry(sessionId: string, attempts: number): Promise<SessionData> {
+  let attempt = 0;
+  while (attempt < attempts) {
+    try {
+      const response = await fetch(`/api/session/${sessionId}`);
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(readApiErrorMessage(data, 'Unable to load session.'));
+      }
+      return normalizeSessionData(data);
+    } catch (error) {
+      attempt += 1;
+      if (attempt >= attempts) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 700));
+    }
+  }
+
+  throw new Error('Unable to load session.');
+}
+
+function normalizeSessionData(raw: unknown): SessionData {
+  const data = raw as {
+    sessionId: string;
+    url: string;
+    pageTitle: string;
+    createdAt: number;
+    expiresAt: number;
+    issues: Record<string, AccessibilityIssue[]>;
+    hasScreenshot: boolean;
+    screenshotWidth: number;
+    screenshotHeight: number;
+    elementCoords: Record<string, { xPct: number; yPct: number; wPct: number; hPct: number }>;
+    scanMeta?: ScanMeta;
+  };
+
+  const normalizedIssues = WCAG_PRINCIPLES.reduce((acc, principle) => {
+    acc[principle.id] = Array.isArray(data.issues?.[principle.id])
+      ? data.issues[principle.id]
+      : [];
+    return acc;
+  }, {} as Record<WcagPrincipleId, AccessibilityIssue[]>);
+
+  return {
+    sessionId: data.sessionId,
+    url: data.url,
+    pageTitle: data.pageTitle,
+    createdAt: data.createdAt,
+    expiresAt: data.expiresAt,
+    issues: normalizedIssues,
+    hasScreenshot: Boolean(data.hasScreenshot),
+    screenshotWidth: data.screenshotWidth || 1280,
+    screenshotHeight: data.screenshotHeight || 900,
+    elementCoords: data.elementCoords || {},
+    scanMeta: data.scanMeta,
+  };
 }

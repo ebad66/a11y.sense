@@ -12,8 +12,9 @@ interface SandboxBarProps {
 export function SandboxBar({ url, sessionId, expiresAt, onRescan }: SandboxBarProps) {
   const [copied, setCopied] = useState(false);
   const [editUrl, setEditUrl] = useState(url);
+  const [renderTimestamp] = useState(() => Date.now());
 
-  const expiresIn = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000 / 60 / 60));
+  const expiresIn = Math.max(0, Math.floor((expiresAt - renderTimestamp) / 1000 / 60 / 60));
 
   const shareUrl =
     typeof window !== 'undefined'

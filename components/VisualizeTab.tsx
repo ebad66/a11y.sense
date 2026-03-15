@@ -241,7 +241,7 @@ export function VisualizeTab({
     if (scrollRef.current) scrollRef.current.scrollTop = 0;
 
     // Step 1: use pre-resolved coords from the scan session
-    let resolved: (ResolvedPin | null)[] = nonPassIssues.map((issue) => {
+    const resolved: (ResolvedPin | null)[] = nonPassIssues.map((issue) => {
       const key = issue.selector || issue.element;
       const box = key ? elementCoords[key] : undefined;
       if (box && box.xPct > 0 && box.yPct > 0 && box.xPct <= 1 && box.yPct <= 1) {
