@@ -3,11 +3,12 @@
 import { useState, FormEvent } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
+
 const WCAG_PRINCIPLES = [
-  { id: 'Perceivable',    emoji: '👁️',  label: 'Perceivable',    color: '#6366f1' },
-  { id: 'Operable',      emoji: '🤲',  label: 'Operable',       color: '#f59e0b' },
-  { id: 'Understandable',emoji: '🧠',  label: 'Understandable', color: '#10b981' },
-  { id: 'Robust',        emoji: '⚙️',  label: 'Robust',         color: '#ec4899' },
+  { id: 'Perceivable', emoji: '👁️', label: 'Perceivable', color: '#6366f1' },
+  { id: 'Operable', emoji: '🤲', label: 'Operable', color: '#f59e0b' },
+  { id: 'Understandable', emoji: '🧠', label: 'Understandable', color: '#10b981' },
+  { id: 'Robust', emoji: '⚙️', label: 'Robust', color: '#ec4899' },
 ];
 
 const EXAMPLE_URLS = [

@@ -20,6 +20,8 @@ interface SessionData {
   screenshotWidth: number;
   screenshotHeight: number;
   elementCoords: Record<string, { xPct: number; yPct: number; wPct: number; hPct: number }>;
+  baseline: { score: number; blockerCount: number; riskScore: number; capturedAt: number } | null;
+  artifacts: Array<{ artifactId: string; kind: 'exec-pdf'; fileName: string; createdAt: number; contentType: string }>;
 }
 
 type IssueTab = 'critical' | 'warning' | 'pass' | 'visualize';
@@ -36,6 +38,7 @@ export default function ScanPage({ params }: { params: Promise<{ sessionId: stri
   const [copied, setCopied] = useState(false);
   const [rescanning, setRescanning] = useState(false);
   const [activeTab, setActiveTab] = useState<IssueTab>('critical');
+  const [exportingPdf, setExportingPdf] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -94,6 +97,41 @@ export default function ScanPage({ params }: { params: Promise<{ sessionId: stri
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {}
+  };
+
+  const handleExecPdfExport = async () => {
+    if (exportingPdf) return;
+    setExportingPdf(true);
+    try {
+      const response = await fetch(`/api/exec-export/${sessionId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ includeComparison: true }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Exec export failed');
+      window.open(data.downloadUrl, '_blank', 'noopener,noreferrer');
+
+      setSession((prev) => {
+        if (!prev) return prev;
+        const nextArtifacts = [
+          {
+            artifactId: data.artifactId,
+            kind: 'exec-pdf' as const,
+            fileName: data.fileName,
+            createdAt: Date.now(),
+            contentType: 'application/pdf',
+          },
+          ...prev.artifacts,
+        ].slice(0, 10);
+
+        return { ...prev, artifacts: nextArtifacts };
+      });
+    } catch (e) {
+      alert(`Exec export failed: ${(e as Error).message}`);
+    } finally {
+      setExportingPdf(false);
+    }
   };
 
   if (loading) {
@@ -211,6 +249,14 @@ export default function ScanPage({ params }: { params: Promise<{ sessionId: stri
             {copied ? 'Copied!' : 'Share'}
           </button>
           <button
+            onClick={handleExecPdfExport}
+            disabled={exportingPdf}
+            style={{ padding: '4px 12px', fontFamily: '"Press Start 2P", monospace', fontSize: '7px', color: '#22c55e', backgroundColor: 'transparent', border: '1px solid #22c55e', borderRadius: '4px', cursor: exportingPdf ? 'wait' : 'pointer', opacity: exportingPdf ? 0.6 : 1 }}
+            aria-label="Generate executive PDF report"
+          >
+            {exportingPdf ? 'PDF...' : 'Exec PDF'}
+          </button>
+          <button
             onClick={handleRescan}
             disabled={rescanning}
             style={{ padding: '4px 12px', fontFamily: '"Press Start 2P", monospace', fontSize: '7px', color: '#f59e0b', backgroundColor: 'transparent', border: '1px solid #f59e0b', borderRadius: '4px', cursor: rescanning ? 'wait' : 'pointer', opacity: rescanning ? 0.6 : 1 }}
@@ -220,6 +266,23 @@ export default function ScanPage({ params }: { params: Promise<{ sessionId: stri
           </button>
         </div>
       </header>
+
+      {session.artifacts.length > 0 && (
+        <div style={{ borderBottom: '1px solid #1a1a2e', padding: '6px 16px', display: 'flex', gap: '10px', overflowX: 'auto', whiteSpace: 'nowrap' }}>
+          <span style={{ fontFamily: '"Press Start 2P", monospace', fontSize: '7px', color: '#9ca3af' }}>Exec artifacts:</span>
+          {session.artifacts.map((artifact) => (
+            <a
+              key={artifact.artifactId}
+              href={`/api/exec-export/${sessionId}/${artifact.artifactId}`}
+              target="_blank"
+              rel="noreferrer"
+              style={{ color: '#22c55e', fontSize: '12px', textDecoration: 'none', fontFamily: 'monospace' }}
+            >
+              {new Date(artifact.createdAt).toLocaleTimeString()} · {artifact.fileName}
+            </a>
+          ))}
+        </div>
+      )}
 
       {/* Body */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>

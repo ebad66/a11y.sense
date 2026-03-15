@@ -3,7 +3,7 @@ import { useFrame } from '@react-three/fiber';
 import { useGLTF, OrbitControls, Line, Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
-import { VisualizerIssue, BodyRegion, WCAGPrinciple } from '@/visualization/types';
+import { VisualizerIssue, BodyRegion } from '@/visualization/types';
 import { REGION_MESHES, PRINCIPLE_TO_REGION } from '@/visualization/bodyPartMapping';
 import { getSeverityStyle, getHighestSeverity } from '@/visualization/skeletonHighlight';
 
@@ -17,7 +17,8 @@ const UI_ANCHORS: Record<BodyRegion, [number, number, number]> = {
   Brain: [-2.5, 2.8, 0],
   EyesEars: [-2.5, 1.8, 0],
   Hands: [-2.5, 0.5, 0],
-  Spine: [-2.5, -0.5, 0]
+  Spine: [-2.5, -0.5, 0],
+  Navigation: [2.5, 0.5, 0],
 };
 
 function CyberLine({
@@ -161,6 +162,8 @@ export function SkeletonViewer({ issues, activeRegion, onRegionSelect }: Skeleto
     EyesEars: { pos: new THREE.Vector3(0, 0.8, 4.0), target: new THREE.Vector3(0, 0.8, 0) },
     // Hands: focusing specifically on the right hand (viewer's left side). X: -2 offset.
     Hands: { pos: new THREE.Vector3(-2, -1, 4), target: new THREE.Vector3(-1.5, -3, 0) },
+    // Navigation mirrors the hand inspection on the opposite side of the model.
+    Navigation: { pos: new THREE.Vector3(2, -1, 4), target: new THREE.Vector3(1.5, -3, 0) },
     // Spine/Nerves Model: Just far enough to fit the full model, centered
     Spine: { pos: new THREE.Vector3(0, 0, 7.0), target: new THREE.Vector3(0, 0, 0) },
   }), []);
@@ -215,6 +218,17 @@ export function SkeletonViewer({ issues, activeRegion, onRegionSelect }: Skeleto
                 emissiveColor = style.color;
                 emissiveIntensity = style.intensity * (0.5 + 0.5 * Math.sin(timeRef.current * 4));
               }
+            }
+
+            const lowerName = mesh.name.toLowerCase();
+            const isNavigationFocusMesh =
+              activeRegion === 'Navigation' &&
+              /(hand|arm|finger)/.test(lowerName) &&
+              lowerName.includes('left');
+
+            if (isNavigationFocusMesh) {
+              emissiveColor = new THREE.Color('#38bdf8');
+              emissiveIntensity = 0.75 + 0.35 * Math.sin(timeRef.current * 4);
             }
 
             mat.emissive = emissiveColor;

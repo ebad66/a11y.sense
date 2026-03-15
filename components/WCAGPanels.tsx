@@ -16,6 +16,12 @@ const PRINCIPLES: { id: WCAGPrinciple; label: string; region: BodyRegion }[] = [
   { id: 'Robust', label: 'Robust (Nervous System)', region: 'Spine' },
 ];
 
+const NAVIGATION_SIGNALS = [
+  'Keyboard path verification',
+  'Focus continuity and visible focus checks',
+  'Route predictability across high-value flows',
+];
+
 export function WCAGPanels({ issues, activeRegion, onRegionSelect, selectedIssueId, onIssueSelect }: WCAGPanelsProps) {
   return (
     <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px', height: '100%', overflowY: 'auto' }}>
@@ -121,6 +127,71 @@ export function WCAGPanels({ issues, activeRegion, onRegionSelect, selectedIssue
           </div>
         );
       })}
+
+      {(() => {
+        const isActive = activeRegion === 'Navigation';
+        const color = '#38bdf8';
+
+        return (
+          <div
+            style={{
+              border: `1px solid ${isActive ? color : '#2a2a4a'}`,
+              borderRadius: '8px',
+              backgroundColor: isActive ? `${color}11` : '#131320',
+              overflow: 'hidden',
+              transition: 'all 0.2s',
+            }}
+          >
+            <button
+              onClick={() => {
+                onIssueSelect(null);
+                onRegionSelect(isActive ? null : 'Navigation');
+              }}
+              style={{
+                width: '100%',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '12px 16px',
+                background: 'none',
+                border: 'none',
+                color: '#fff',
+                cursor: 'pointer',
+                fontFamily: '"Press Start 2P", monospace',
+                fontSize: '8px',
+                textAlign: 'left',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: color }} />
+                <span>Navigation</span>
+              </div>
+              <span style={{ color: '#6b7280' }}>3</span>
+            </button>
+
+            {isActive && (
+              <div style={{ padding: '0 8px 8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {NAVIGATION_SIGNALS.map((signal) => (
+                  <div
+                    key={signal}
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: '6px',
+                      backgroundColor: '#101925',
+                      border: '1px solid #1e3a4c',
+                      color: '#cbd5e1',
+                      fontSize: '11px',
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    {signal}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }

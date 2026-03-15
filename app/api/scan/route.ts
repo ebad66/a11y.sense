@@ -103,6 +103,7 @@ export async function POST(req: NextRequest) {
     await browserResult.close();
 
     const sessionId = nanoid(12);
+
     createSession(
       sessionId,
       normalizedUrl,
