@@ -23,7 +23,7 @@ Paste a URL. Get a full accessibility audit mapped to WCAG principles. See every
 
 Every issue is mapped to the body system it affects. **Perceivable** lights up the skull and sensory anatomy. **Operable** targets the hands. **Understandable** hits the brain. **Robust** traces the nervous system. Click any body part to drill into the exact issues, the affected users, and the fix.
 
-![a11y.sense visualizer — Robust / Nervous System view](public/Screenshot%202026-03-15%20063540.png)
+![a11y.sense visualizer — Robust / Nervous System view](public/fulldashboardview.png)
 
 Each issue panel shows you:
 - The **WCAG principle and success criterion** it violates
