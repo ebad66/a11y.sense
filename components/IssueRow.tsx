@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { AccessibilityIssue } from '@/lib/claude';
 
 interface IssueRowProps {
@@ -10,150 +10,111 @@ interface IssueRowProps {
 
 const SEVERITY_CONFIG = {
   Critical: {
-    color: '#ef4444',
-    label: 'CRITICAL',
+    text: 'Critical',
+    chip: 'bg-red-500/15 text-red-200 border-red-400/50',
+    dot: 'bg-red-400',
   },
   Warning: {
-    color: '#f59e0b',
-    label: 'WARNING',
+    text: 'Warning',
+    chip: 'bg-amber-500/15 text-amber-200 border-amber-400/50',
+    dot: 'bg-amber-400',
   },
   Pass: {
-    color: '#10b981',
-    label: 'PASS',
+    text: 'Pass',
+    chip: 'bg-emerald-500/15 text-emerald-200 border-emerald-400/50',
+    dot: 'bg-emerald-400',
   },
 };
 
 export function IssueRow({ issue, index }: IssueRowProps) {
-  const [expanded, setExpanded] = useState(index < 3);
+  const [expanded, setExpanded] = useState(index < 2);
   const config = SEVERITY_CONFIG[issue.severity];
 
+  const evidenceLabel = useMemo(() => {
+    if (issue.selector) return 'Exact selector evidence';
+    if (issue.element) return 'Element snippet evidence';
+    return 'Heuristic evidence only';
+  }, [issue.element, issue.selector]);
+
   return (
-    <div style={{ borderBottom: '1px solid #1a1a2e' }}>
-      {/* Header row */}
+    <article className="border-b border-slate-800/80 py-1">
       <button
-        style={{
-          width: '100%',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px',
-          padding: '11px 0',
-          textAlign: 'left',
-          background: 'none',
-          border: 'none',
-          cursor: 'pointer',
-          color: 'inherit',
-        }}
-        onClick={() => setExpanded(!expanded)}
+        type="button"
+        className="w-full text-left px-1 py-3 flex items-start gap-3 hover:bg-slate-900/40 rounded-md"
+        onClick={() => setExpanded((previous) => !previous)}
         aria-expanded={expanded}
-        aria-label={`${issue.severity}: ${issue.title}. Click to ${expanded ? 'collapse' : 'expand'}.`}
+        aria-label={`${issue.severity}: ${issue.title}. ${expanded ? 'Collapse' : 'Expand'} details`}
       >
-        {/* Severity badge — outline style */}
-        <span
-          style={{
-            flexShrink: 0,
-            fontFamily: '"Press Start 2P", monospace',
-            fontSize: '7px',
-            color: config.color,
-            border: `1px solid ${config.color}`,
-            borderRadius: '3px',
-            padding: '3px 8px',
-            whiteSpace: 'nowrap',
-            lineHeight: 1.5,
-            minWidth: '72px',
-            textAlign: 'center',
-          }}
-          aria-hidden="true"
-        >
-          {config.label}
-        </span>
+        <span className={`mt-1.5 inline-block size-2 rounded-full ${config.dot}`} aria-hidden="true" />
 
-        {/* Title */}
-        <span style={{ flex: 1, color: '#d1d5db', fontSize: '13px', lineHeight: 1.4 }}>
-          {issue.title}
-        </span>
+        <div className="flex-1 min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={`text-[11px] border rounded-full px-2 py-0.5 font-semibold ${config.chip}`}>
+              {config.text}
+            </span>
+            {issue.wcag && <span className="text-xs text-slate-300">{issue.wcag}</span>}
+            {issue.confidence && (
+              <span className="text-[11px] text-slate-300 border border-slate-600 rounded-full px-2 py-0.5">
+                Confidence: {issue.confidence}
+              </span>
+            )}
+            {issue.effort && (
+              <span className="text-[11px] text-slate-300 border border-slate-600 rounded-full px-2 py-0.5">
+                Effort: {issue.effort}
+              </span>
+            )}
+          </div>
 
-        {/* WCAG tag */}
-        {issue.wcag && (
-          <span
-            style={{
-              flexShrink: 0,
-              fontSize: '11px',
-              color: '#6b7280',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {issue.wcag}
-          </span>
-        )}
+          <h3 className="mt-2 text-sm sm:text-[15px] font-medium text-slate-100 leading-snug">{issue.title}</h3>
+          <p className="mt-1 text-xs text-slate-400">{evidenceLabel}</p>
+        </div>
 
-        {/* Chevron */}
-        <span
-          style={{
-            flexShrink: 0,
-            color: '#4b5563',
-            fontSize: '12px',
-            transition: 'transform 0.2s',
-            transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
-          }}
-          aria-hidden="true"
-        >
-          ▾
+        <span className="text-slate-500 pt-1 text-lg leading-none" aria-hidden="true">
+          {expanded ? '−' : '+'}
         </span>
       </button>
 
-      {/* Expanded content */}
       {expanded && (
-        <div style={{ paddingBottom: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          {/* Description */}
-          <p style={{ color: '#9ca3af', fontSize: '13px', lineHeight: 1.6, margin: 0 }}>
-            {issue.description}
-          </p>
+        <div className="px-6 pb-4">
+          <p className="text-sm text-slate-200 leading-relaxed">{issue.description}</p>
 
-          {/* Affected element */}
-          {issue.element && (
-            <div>
-              <p style={{ fontSize: '10px', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '5px', fontWeight: 600 }}>
-                Affected element
-              </p>
-              <code
-                style={{
-                  display: 'block',
-                  fontSize: '11px',
-                  padding: '8px 12px',
-                  borderRadius: '4px',
-                  fontFamily: 'monospace',
-                  color: '#6ee7b7',
-                  backgroundColor: '#0f0f1a',
-                  border: '1px solid #2a2a4a',
-                  overflowX: 'auto',
-                }}
-              >
-                {issue.element}
+          {issue.affectedUsers && issue.affectedUsers.length > 0 && (
+            <div className="mt-3 text-xs text-slate-300">
+              <span className="font-semibold text-slate-100">Impacted users:</span>{' '}
+              {issue.affectedUsers.join(', ')}
+            </div>
+          )}
+
+          <div className="mt-3 rounded-md border border-indigo-400/30 bg-indigo-500/10 px-3 py-2 text-sm text-indigo-100 leading-relaxed">
+            <p className="text-[11px] uppercase tracking-wide text-indigo-200 font-semibold mb-1">Recommended fix</p>
+            {issue.fix}
+          </div>
+
+          {issue.rationale && (
+            <p className="mt-3 text-xs text-slate-300 leading-relaxed">
+              <span className="font-semibold text-slate-100">Why this matters:</span> {issue.rationale}
+            </p>
+          )}
+
+          {issue.selector && (
+            <div className="mt-3">
+              <p className="text-[11px] uppercase tracking-wide text-slate-400 mb-1">CSS selector</p>
+              <code className="block rounded bg-slate-950 border border-slate-700 px-3 py-2 text-xs text-cyan-200 overflow-x-auto">
+                {issue.selector}
               </code>
             </div>
           )}
 
-          {/* Fix */}
-          <div>
-            <p style={{ fontSize: '10px', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '5px', fontWeight: 600 }}>
-              How to fix
-            </p>
-            <div
-              style={{
-                fontSize: '12px',
-                padding: '8px 12px',
-                borderRadius: '4px',
-                color: '#93c5fd',
-                backgroundColor: '#1e3a5f',
-                border: '1px solid #2a4a7f',
-                lineHeight: 1.6,
-              }}
-            >
-              {issue.fix}
+          {!issue.selector && issue.element && (
+            <div className="mt-3">
+              <p className="text-[11px] uppercase tracking-wide text-slate-400 mb-1">HTML evidence</p>
+              <code className="block rounded bg-slate-950 border border-slate-700 px-3 py-2 text-xs text-cyan-200 overflow-x-auto whitespace-pre-wrap">
+                {issue.element}
+              </code>
             </div>
-          </div>
+          )}
         </div>
       )}
-    </div>
+    </article>
   );
 }

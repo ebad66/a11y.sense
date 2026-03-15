@@ -12,85 +12,45 @@ interface PrincipleCardProps {
 
 /** Sidebar card for a single WCAG principle. */
 export function ProfileCard({ principle, issues, isActive, onClick }: PrincipleCardProps) {
-  const criticalCount = issues.filter((i) => i.severity === 'Critical').length;
-  const warningCount  = issues.filter((i) => i.severity === 'Warning').length;
+  const criticalCount = issues.filter((issue) => issue.severity === 'Critical').length;
+  const warningCount = issues.filter((issue) => issue.severity === 'Warning').length;
 
   return (
     <button
+      type="button"
       onClick={onClick}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '10px',
-        padding: '16px 14px',
-        width: '100%',
-        borderLeft:  isActive ? `3px solid ${principle.color}` : '3px solid transparent',
-        borderRight: 'none',
-        borderTop:   'none',
-        borderBottom: '1px solid #1a1a2e',
-        backgroundColor: isActive ? `${principle.color}11` : 'transparent',
-        cursor: 'pointer',
-        textAlign: 'left',
-        transition: 'background-color 0.15s',
-      }}
+      className={`w-full text-left px-3 py-3 border rounded-lg transition-colors ${
+        isActive
+          ? 'bg-slate-800/80 border-slate-500/80'
+          : 'bg-slate-900/40 border-slate-700/60 hover:border-slate-500/70'
+      }`}
       aria-pressed={isActive}
-      aria-label={`${principle.label} — ${criticalCount} critical, ${warningCount} warnings`}
+      aria-label={`${principle.label}: ${criticalCount} critical, ${warningCount} warnings`}
     >
-      {/* Icon */}
-      <div
-        style={{
-          width: '36px', height: '36px',
-          flexShrink: 0,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          backgroundColor: `${principle.color}22`,
-          border: `1px solid ${principle.color}44`,
-          borderRadius: '6px',
-          fontSize: '18px',
-        }}
-        aria-hidden="true"
-      >
-        {principle.emoji}
-      </div>
-
-      {/* Label + badges */}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{
-          fontFamily: '"Press Start 2P", monospace',
-          fontSize: '9px',
-          color: isActive ? '#fff' : '#9ca3af',
-          marginBottom: '5px',
-          lineHeight: 1.3,
-        }}>
-          {principle.label}
+      <div className="flex items-start gap-3">
+        <div
+          className="size-10 shrink-0 rounded-lg border flex items-center justify-center text-lg"
+          style={{
+            backgroundColor: `${principle.color}22`,
+            borderColor: `${principle.color}66`,
+          }}
+          aria-hidden="true"
+        >
+          {principle.emoji}
         </div>
-        <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-          {criticalCount > 0 && (
-            <span style={{
-              fontFamily: '"Press Start 2P", monospace', fontSize: '6px',
-              color: '#ef4444', border: '1px solid #ef444466',
-              borderRadius: '2px', padding: '2px 5px', lineHeight: 1.4,
-            }}>
-              {criticalCount} crit
+
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-white">{principle.label}</p>
+          <p className="text-xs text-slate-400 mt-0.5">WCAG {principle.guidelines}</p>
+
+          <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
+            <span className="rounded-full border border-red-400/50 bg-red-500/15 px-2 py-0.5 text-red-200">
+              {criticalCount} critical
             </span>
-          )}
-          {warningCount > 0 && (
-            <span style={{
-              fontFamily: '"Press Start 2P", monospace', fontSize: '6px',
-              color: '#f59e0b', border: '1px solid #f59e0b66',
-              borderRadius: '2px', padding: '2px 5px', lineHeight: 1.4,
-            }}>
-              {warningCount} warn
+            <span className="rounded-full border border-amber-400/50 bg-amber-500/15 px-2 py-0.5 text-amber-200">
+              {warningCount} warnings
             </span>
-          )}
-          {criticalCount === 0 && warningCount === 0 && (
-            <span style={{
-              fontFamily: '"Press Start 2P", monospace', fontSize: '6px',
-              color: '#10b981', border: '1px solid #10b98166',
-              borderRadius: '2px', padding: '2px 5px', lineHeight: 1.4,
-            }}>
-              all pass
-            </span>
-          )}
+          </div>
         </div>
       </div>
     </button>
