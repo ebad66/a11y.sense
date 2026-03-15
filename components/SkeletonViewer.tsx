@@ -141,18 +141,17 @@ export function SkeletonViewer({ issues, activeRegion, onRegionSelect }: Skeleto
     });
   }, [clonedBrain]);
 
-  // Setup Nerves center
-  useMemo(() => {
-    clonedNerves.traverse((child) => {
-      if ((child as THREE.Mesh).isMesh) {
-        if ((child as THREE.Mesh).geometry) {
-           (child as THREE.Mesh).geometry.center();
-        }
-      }
-    });
-  }, [clonedNerves]);
-
   const controlsRef = useRef<OrbitControlsImpl>(null);
+
+  // Center nerves children so the bounding box center sits exactly at the group origin.
+  // This ensures rotation stays visually centered rather than orbiting off-axis.
+  useMemo(() => {
+    clonedNerves.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(clonedNerves);
+    const center = new THREE.Vector3();
+    box.getCenter(center);
+    clonedNerves.children.forEach(child => child.position.sub(center));
+  }, [clonedNerves]);
 
   // Region camera targets mapping (Pos = Camera position, Target = lookAt point on character)
   const REGION_TARGETS: Record<BodyRegion, { pos: THREE.Vector3, target: THREE.Vector3 }> = useMemo(() => ({
@@ -162,8 +161,8 @@ export function SkeletonViewer({ issues, activeRegion, onRegionSelect }: Skeleto
     EyesEars: { pos: new THREE.Vector3(0, 0.8, 4.0), target: new THREE.Vector3(0, 0.8, 0) },
     // Hands: focusing specifically on the right hand (viewer's left side). X: -2 offset.
     Hands: { pos: new THREE.Vector3(-2, -1, 4), target: new THREE.Vector3(-1.5, -3, 0) },
-    // Spine/Nerves Model: Centered and zoomed back slightly to see full structure
-    Spine: { pos: new THREE.Vector3(0, 0, 6.5), target: new THREE.Vector3(0, 0, 0) },
+    // Spine/Nerves Model: Just far enough to fit the full model, centered
+    Spine: { pos: new THREE.Vector3(0, 0, 7.0), target: new THREE.Vector3(0, 0, 0) },
   }), []);
 
   // Default camera target - matching the Hands region exactly
@@ -179,8 +178,8 @@ export function SkeletonViewer({ issues, activeRegion, onRegionSelect }: Skeleto
     clonedBrain.position.y = Math.sin(timeRef.current * 2) * 0.1;
     clonedBrain.rotation.y += delta * 0.2;
     
-    // Rotate and bob nerves slowly
-    clonedNerves.position.y = Math.sin(timeRef.current * 1.5) * 0.1;
+    // Rotate and bob nerves — children are pre-centered so rotation stays on axis
+    clonedNerves.position.set(0, Math.sin(timeRef.current * 1.5) * 0.1, 0);
     clonedNerves.rotation.y -= delta * 0.1;
 
     // Smooth camera interpolation

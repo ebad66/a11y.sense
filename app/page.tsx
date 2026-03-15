@@ -1,9 +1,16 @@
 'use client';
 
 import { useState, FormEvent } from 'react';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { PROFILES } from '@/lib/profiles';
 import { JourneyTester } from '@/components/JourneyTester';
+
+const WCAG_PRINCIPLES = [
+  { id: 'Perceivable', emoji: '👁️', label: 'Perceivable', color: '#6366f1' },
+  { id: 'Operable', emoji: '🤲', label: 'Operable', color: '#f59e0b' },
+  { id: 'Understandable', emoji: '🧠', label: 'Understandable', color: '#10b981' },
+  { id: 'Robust', emoji: '⚙️', label: 'Robust', color: '#ec4899' },
+];
 
 const EXAMPLE_URLS = [
   'https://gov.uk',
@@ -63,12 +70,14 @@ export default function HomePage() {
 
       {/* Header */}
       <div className="text-center mb-12 max-w-2xl">
-        <div
-          className="text-4xl mb-4"
-          aria-hidden="true"
-          style={{ letterSpacing: '-2px' }}
-        >
-          🔍
+        <div className="mb-4" aria-hidden="true">
+          <Image
+            src="/a11y_sense_icon.png"
+            alt=""
+            width={72}
+            height={72}
+            style={{ margin: '0 auto' }}
+          />
         </div>
         <h1
           className="mb-4 text-white leading-tight"
@@ -80,9 +89,9 @@ export default function HomePage() {
         >
           a11y.sense
         </h1>
-        {/* Profile preview pills */}
-        <div className="flex flex-wrap justify-center gap-2 mt-6" aria-label="Supported disability profiles">
-          {PROFILES.map((p) => (
+        {/* WCAG principle pills */}
+        <div className="flex flex-wrap justify-center gap-2 mt-6" aria-label="WCAG 2.1 principles audited">
+          {WCAG_PRINCIPLES.map((p) => (
             <span
               key={p.id}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium text-white"
@@ -216,7 +225,7 @@ export default function HomePage() {
           {
             icon: '⚡',
             title: 'Parallel analysis',
-            desc: 'All 5 profiles analyzed simultaneously via Claude AI',
+            desc: 'All 4 WCAG principles audited simultaneously via Gemini AI',
           },
           {
             icon: '🎯',
@@ -224,9 +233,9 @@ export default function HomePage() {
             desc: 'Issues mapped to specific WCAG 2.1 success criteria',
           },
           {
-            icon: '👁️',
-            title: 'Visual simulations',
-            desc: 'See the page through each user\'s eyes via Gemini Vision',
+            icon: '📄',
+            title: 'Developer handoff',
+            desc: 'Generate a ready-to-share .md report per principle — copy or download',
           },
         ].map((feat) => (
           <div
