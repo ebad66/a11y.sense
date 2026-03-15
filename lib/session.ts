@@ -1,6 +1,16 @@
 import { AccessibilityIssue } from './claude';
 import { ScrapedPage } from './scraper';
 import { ElementBox } from './screenshot';
+import { WcagPrincipleId } from './wcag';
+
+export interface SessionScanMeta {
+  partial: boolean;
+  warnings: string[];
+  completedStages: string[];
+  failedStages: string[];
+  stageTimingsMs: Record<string, number>;
+  principleStatus: Record<WcagPrincipleId, 'ok' | 'fallback'>;
+}
 
 export interface ScanSession {
   sessionId: string;
@@ -15,6 +25,7 @@ export interface ScanSession {
   screenshotHeight?: number;
   /** selector → bounding box (percentages of full page), resolved during scan */
   elementCoords?: Record<string, ElementBox>;
+  scanMeta?: SessionScanMeta;
 }
 
 // In-memory store — use global to survive Next.js hot-reloads and cross-route module instances
@@ -23,6 +34,9 @@ if (!g._sessions) g._sessions = new Map<string, ScanSession>();
 const sessions = g._sessions;
 
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const MAX_SESSIONS = 60;
+const MAX_SCREENSHOT_BYTES = 8 * 1024 * 1024; // 8MB
+const MAX_SCREENSHOT_BASE64_LENGTH = Math.ceil((MAX_SCREENSHOT_BYTES * 4) / 3);
 
 export function createSession(
   sessionId: string,
@@ -33,9 +47,30 @@ export function createSession(
   screenshotMime?: string,
   screenshotWidth?: number,
   screenshotHeight?: number,
-  elementCoords?: Record<string, ElementBox>
+  elementCoords?: Record<string, ElementBox>,
+  scanMeta?: SessionScanMeta
 ): ScanSession {
   const now = Date.now();
+
+  // Keep the in-memory store bounded so long-running dev sessions do not grow without limit.
+  if (sessions.size >= MAX_SESSIONS) {
+    evictOldestSession();
+  }
+
+  const screenshotTooLarge = Boolean(screenshot && screenshot.length > MAX_SCREENSHOT_BASE64_LENGTH);
+  const finalScreenshot = screenshotTooLarge ? undefined : screenshot;
+  const finalScreenshotMime = screenshotTooLarge ? undefined : screenshotMime;
+
+  const finalMeta = scanMeta
+    ? {
+        ...scanMeta,
+        warnings: screenshotTooLarge
+          ? [...scanMeta.warnings, 'Screenshot omitted because it exceeded in-memory size limits.']
+          : scanMeta.warnings,
+        partial: screenshotTooLarge ? true : scanMeta.partial,
+      }
+    : undefined;
+
   const session: ScanSession = {
     sessionId,
     url,
@@ -43,12 +78,14 @@ export function createSession(
     createdAt: now,
     expiresAt: now + SESSION_TTL_MS,
     issues,
-    screenshot,
-    screenshotMime,
+    screenshot: finalScreenshot,
+    screenshotMime: finalScreenshotMime,
     screenshotWidth,
     screenshotHeight,
     elementCoords,
+    scanMeta: finalMeta,
   };
+
   sessions.set(sessionId, session);
 
   // Clean up expired sessions periodically
@@ -92,4 +129,20 @@ function scheduleCleanup() {
     }
     cleanupScheduled = false;
   }, 60 * 60 * 1000); // run every hour
+}
+
+function evictOldestSession() {
+  let oldestId: string | null = null;
+  let oldestCreatedAt = Number.POSITIVE_INFINITY;
+
+  for (const [id, session] of sessions.entries()) {
+    if (session.createdAt < oldestCreatedAt) {
+      oldestCreatedAt = session.createdAt;
+      oldestId = id;
+    }
+  }
+
+  if (oldestId) {
+    sessions.delete(oldestId);
+  }
 }

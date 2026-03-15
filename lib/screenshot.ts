@@ -1,4 +1,4 @@
-import { chromium, Browser, Page } from 'playwright';
+import { chromium, Page } from 'playwright';
 
 export interface ElementBox {
   selector: string;
