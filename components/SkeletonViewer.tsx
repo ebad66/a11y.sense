@@ -74,8 +74,10 @@ function CyberLine({
 export function SkeletonViewer({ issues, activeRegion, onRegionSelect }: SkeletonViewerProps) {
   const { scene: skeletonScene } = useGLTF('/skeleton.glb');
   const { scene: brainScene } = useGLTF('/brain_point_cloud.glb');
+  const { scene: nervesScene } = useGLTF('/nerves.glb');
   const clonedSkeleton = useMemo(() => skeletonScene.clone(), [skeletonScene]);
   const clonedBrain = useMemo(() => brainScene.clone(), [brainScene]);
+  const clonedNerves = useMemo(() => nervesScene.clone(), [nervesScene]);
   
   const timeRef = useRef(0);
   const [centers, setCenters] = useState<Partial<Record<BodyRegion, THREE.Vector3>>>({});
@@ -139,6 +141,17 @@ export function SkeletonViewer({ issues, activeRegion, onRegionSelect }: Skeleto
     });
   }, [clonedBrain]);
 
+  // Setup Nerves center
+  useMemo(() => {
+    clonedNerves.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) {
+        if ((child as THREE.Mesh).geometry) {
+           (child as THREE.Mesh).geometry.center();
+        }
+      }
+    });
+  }, [clonedNerves]);
+
   const controlsRef = useRef<OrbitControlsImpl>(null);
 
   // Region camera targets mapping (Pos = Camera position, Target = lookAt point on character)
@@ -149,7 +162,8 @@ export function SkeletonViewer({ issues, activeRegion, onRegionSelect }: Skeleto
     EyesEars: { pos: new THREE.Vector3(0, 0.8, 4.0), target: new THREE.Vector3(0, 0.8, 0) },
     // Hands: focusing specifically on the right hand (viewer's left side). X: -2 offset.
     Hands: { pos: new THREE.Vector3(-2, -1, 4), target: new THREE.Vector3(-1.5, -3, 0) },
-    Spine: { pos: new THREE.Vector3(0, 0.5, 7), target: new THREE.Vector3(0, 0.5, 0) },
+    // Spine/Nerves Model: Centered and zoomed back slightly to see full structure
+    Spine: { pos: new THREE.Vector3(0, 0, 6.5), target: new THREE.Vector3(0, 0, 0) },
   }), []);
 
   // Default camera target - matching the Hands region exactly
@@ -164,6 +178,10 @@ export function SkeletonViewer({ issues, activeRegion, onRegionSelect }: Skeleto
     // Rotate and bob brain
     clonedBrain.position.y = Math.sin(timeRef.current * 2) * 0.1;
     clonedBrain.rotation.y += delta * 0.2;
+    
+    // Rotate and bob nerves slowly
+    clonedNerves.position.y = Math.sin(timeRef.current * 1.5) * 0.1;
+    clonedNerves.rotation.y -= delta * 0.1;
 
     // Smooth camera interpolation
     if (controlsRef.current) {
@@ -231,6 +249,21 @@ export function SkeletonViewer({ issues, activeRegion, onRegionSelect }: Skeleto
           }
        }
     });
+
+    // Nerves pulse animation
+    const spineSeverity = regionSeverities['Spine'];
+    clonedNerves.traverse((child) => {
+       const mat = (child as any).material;
+       if (mat) {
+          if (spineSeverity && spineSeverity !== 'Pass') {
+            const style = getSeverityStyle(spineSeverity);
+            if (mat.emissive) {
+               mat.emissive.copy(style.color);
+               mat.emissiveIntensity = style.intensity * (0.5 + 0.5 * Math.sin(timeRef.current * 2.5));
+            }
+          }
+       }
+    });
   });
 
   const handleClick = (e: any) => {
@@ -256,7 +289,7 @@ export function SkeletonViewer({ issues, activeRegion, onRegionSelect }: Skeleto
         object={clonedSkeleton}
         position={[0, -2.5, 0]}
         scale={3.6}
-        visible={activeRegion !== 'Brain'}
+        visible={activeRegion !== 'Brain' && activeRegion !== 'Spine'}
         onClick={handleClick}
         onPointerOver={(e: any) => {
           e.stopPropagation();
@@ -277,12 +310,19 @@ export function SkeletonViewer({ issues, activeRegion, onRegionSelect }: Skeleto
          visible={activeRegion === 'Brain'}
       />
 
+      {/* Nervous System Model */}
+      <primitive
+         object={clonedNerves}
+         position={[0, 0, 0]}
+         scale={3.0} // Adjust scale as needed based on the file's natural size
+         visible={activeRegion === 'Spine'}
+      />
+
       {activeRegionsToDraw.map(([region, severity]) => {
-        // Hide the connection line completely when viewing the specific Brain model
-        if (activeRegion === 'Brain') return null;
+        // Hide the connection line completely when viewing the specific alternate models
+        if (activeRegion === 'Brain' || activeRegion === 'Spine') return null;
         
-        // At this point activeRegion is guaranteed to not be 'Brain' due to the return above.
-        // The skeleton regions handles lines normally:
+        // At this point activeRegion is guaranteed to be a normal skeleton part
         const centerLocal = centers[region as BodyRegion];
         if (!centerLocal) return null;
         const color = getSeverityStyle(severity as any).color;
@@ -310,3 +350,4 @@ export function SkeletonViewer({ issues, activeRegion, onRegionSelect }: Skeleto
 
 useGLTF.preload('/skeleton.glb');
 useGLTF.preload('/brain_point_cloud.glb');
+useGLTF.preload('/nerves.glb');
