@@ -42,6 +42,16 @@ When you're done auditing, generate a **developer-ready `.md` report** per WCAG 
 
 ---
 
+---
+
+## Summarized PDF
+
+![PDF Download](public/pdfanalysis.png)
+
+Download and share a `.pdf` with team members or clients to easily discuss suggested changes. The pdf also includes estimated effort,  suggested owner, and ROI for each issue; making prioritization simpler.
+
+---
+
 ## Features
 
 - **Live URL auditing** — paste any URL, get real results in seconds
