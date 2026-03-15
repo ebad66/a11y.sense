@@ -1,5 +1,6 @@
 import { AccessibilityIssue } from './claude';
-import { inferPrinciple, WCAGPrinciple } from '../visualization/bodyPartMapping';
+import { inferPrinciple } from '../visualization/bodyPartMapping';
+import type { WCAGPrinciple } from '../visualization/types';
 
 export interface IssueSummary {
   criticalCount: number;

@@ -26,8 +26,6 @@ export async function GET(
     screenshotWidth: session.screenshotWidth ?? 1280,
     screenshotHeight: session.screenshotHeight ?? 900,
     elementCoords: session.elementCoords ?? {},
-    journeyRun: session.journeyRun ?? null,
-    transcript: session.transcript ?? null,
     baseline: session.baseline ?? null,
     artifacts: session.artifacts.map((a) => ({
       artifactId: a.artifactId,
