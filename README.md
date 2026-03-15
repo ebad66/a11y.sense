@@ -126,7 +126,7 @@ Building a11y.sense gave us a deep appreciation for the craft of AI prompt engin
 
 <!-- INSERT TEAM NAMES / LINKS HERE -->
 
-Made with conviction at **[Hackathon Name]**.
+Made with conviction at **GenAIGenesis**.
 
 ---
 
