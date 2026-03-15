@@ -25,11 +25,10 @@ export interface ScanSession {
   createdAt: number;
   expiresAt: number;
   issues: Record<string, AccessibilityIssue[]>;
-  screenshot?: string; // base64
+  screenshot?: string;
   screenshotMime?: string;
   screenshotWidth?: number;
   screenshotHeight?: number;
-  /** selector → bounding box (percentages of full page), resolved during scan */
   elementCoords?: Record<string, ElementBox>;
   baseline?: BaselineSnapshot;
   artifacts: SessionArtifact[];
@@ -81,10 +80,11 @@ export function createSession(
     baseline,
     artifacts: [],
   };
+
   sessions.set(sessionId, session);
   latestBaselineByUrl.set(url, { score, blockerCount, riskScore, capturedAt: now });
-
   scheduleCleanup();
+
   return session;
 }
 
@@ -98,11 +98,7 @@ export function getSession(sessionId: string): ScanSession | null {
   return session;
 }
 
-export function updateSessionScreenshot(
-  sessionId: string,
-  screenshot: string,
-  mimeType: string
-): boolean {
+export function updateSessionScreenshot(sessionId: string, screenshot: string, mimeType: string): boolean {
   const session = sessions.get(sessionId);
   if (!session) return false;
   session.screenshot = screenshot;
@@ -131,9 +127,7 @@ function scheduleCleanup() {
   setTimeout(() => {
     const now = Date.now();
     for (const [id, session] of sessions.entries()) {
-      if (now > session.expiresAt) {
-        sessions.delete(id);
-      }
+      if (now > session.expiresAt) sessions.delete(id);
     }
     cleanupScheduled = false;
   }, 60 * 60 * 1000);

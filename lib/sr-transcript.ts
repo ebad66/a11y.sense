@@ -61,6 +61,7 @@ interface BuildTranscriptInput {
 }
 
 const NON_DESCRIPTIVE = new Set(['click here', 'here', 'button', 'link', 'more', 'learn more', 'go']);
+type CheerioRoot = ReturnType<typeof cheerio.load>;
 
 export function buildJourneyTranscript(input: BuildTranscriptInput): JourneyTranscript {
   const { journeyRun, html, finalUrl } = input;
@@ -185,7 +186,7 @@ export function buildJourneyTranscript(input: BuildTranscriptInput): JourneyTran
 }
 
 function detectConfusionFlags(
-  $: cheerio.CheerioAPI,
+  $: CheerioRoot,
   events: TranscriptEvent[],
   stepId: string,
   finalUrl: string,
@@ -279,7 +280,7 @@ function detectConfusionFlags(
   return flags;
 }
 
-function normalizeRole($: cheerio.CheerioAPI, el: cheerio.Element): string {
+function normalizeRole($: CheerioRoot, el: cheerio.Element): string {
   const role = $(el).attr('role');
   if (role) return role;
   const tag = (el as { tagName?: string }).tagName?.toLowerCase() || '';
@@ -291,7 +292,7 @@ function normalizeRole($: cheerio.CheerioAPI, el: cheerio.Element): string {
   return tag || 'generic';
 }
 
-function nameOf($: cheerio.CheerioAPI, el: cheerio.Element): string {
+function nameOf($: CheerioRoot, el: cheerio.Element): string {
   const $el = $(el);
   const ariaLabel = $el.attr('aria-label')?.trim();
   if (ariaLabel) return ariaLabel;
@@ -322,7 +323,7 @@ function nameOf($: cheerio.CheerioAPI, el: cheerio.Element): string {
   return alt || '';
 }
 
-function stateOf($: cheerio.CheerioAPI, el: cheerio.Element): string | undefined {
+function stateOf($: CheerioRoot, el: cheerio.Element): string | undefined {
   const $el = $(el);
   const states: string[] = [];
   if ($el.attr('disabled') !== undefined || $el.attr('aria-disabled') === 'true') states.push('disabled');
@@ -334,13 +335,13 @@ function stateOf($: cheerio.CheerioAPI, el: cheerio.Element): string | undefined
   return states.length ? states.join(', ') : undefined;
 }
 
-function nearestLandmark($: cheerio.CheerioAPI, el: cheerio.Element): string | undefined {
+function nearestLandmark($: CheerioRoot, el: cheerio.Element): string | undefined {
   const landmark = $(el).parents('main, nav, header, footer, aside, [role="main"], [role="navigation"], [role="banner"], [role="contentinfo"], [role="complementary"]').first();
   if (!landmark.length) return undefined;
   return normalizeRole($, landmark.get(0));
 }
 
-function selectorHint($: cheerio.CheerioAPI, el: cheerio.Element): string {
+function selectorHint($: CheerioRoot, el: cheerio.Element): string {
   const $el = $(el);
   const id = $el.attr('id');
   if (id) return `#${id}`;

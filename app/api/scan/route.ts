@@ -5,8 +5,6 @@ import { auditAllProfiles } from '@/lib/claude';
 import { createSession } from '@/lib/session';
 import { PROFILES } from '@/lib/profiles';
 import { capturePageData } from '@/lib/screenshot';
-import { JourneyRun } from '@/lib/journey';
-import { buildJourneyTranscript } from '@/lib/sr-transcript';
 
 export const maxDuration = 120;
 
@@ -106,36 +104,6 @@ export async function POST(req: NextRequest) {
 
     const sessionId = nanoid(12);
 
-    const now = Date.now();
-    const journeyRun: JourneyRun = {
-      id: `run-${sessionId}`,
-      templateId: 'single-page-discovery',
-      templateName: 'Single Page Discovery (MVP)',
-      startedAt: now,
-      completedAt: now,
-      confidence: 0.82,
-      finalStatus: 'passed',
-      steps: [
-        {
-          id: `step-${sessionId}-1`,
-          name: 'Load and explore primary page context',
-          action: 'initial-load + tab-order-scan',
-          expected: 'Landmarks, headings, and controls are announced with meaningful context.',
-          observed: 'Transcript generated from rendered DOM snapshot.',
-          status: 'passed',
-          startedAt: now,
-          completedAt: now,
-          url: normalizedUrl,
-        },
-      ],
-    };
-
-    const transcript = buildJourneyTranscript({
-      journeyRun,
-      html: browserResult.renderedHtml,
-      finalUrl: normalizedUrl,
-    });
-
     createSession(
       sessionId,
       normalizedUrl,
@@ -145,9 +113,7 @@ export async function POST(req: NextRequest) {
       browserResult.screenshot.mimeType,
       browserResult.screenshot.width,
       browserResult.screenshot.height,
-      elementCoords,
-      journeyRun,
-      transcript
+      elementCoords
     );
 
     return NextResponse.json({
