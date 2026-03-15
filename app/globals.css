@@ -1,10 +1,14 @@
 @import "tailwindcss";
 
 :root {
-  --background: #0f0f1a;
+  --background: #0b1020;
+  --surface-1: #121a2f;
+  --surface-2: #1a243d;
+  --border: #2b3653;
   --foreground: #e5e7eb;
+  --muted: #9aa7bd;
   --font-pixel: 'Press Start 2P', monospace;
-  --font-sans: var(--font-inter), system-ui, sans-serif;
+  --font-sans: var(--font-inter), system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
 }
 
 body {
@@ -20,76 +24,73 @@ body {
 
 /* Scrollbar styling */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
+
 ::-webkit-scrollbar-track {
-  background: #1a1a2e;
+  background: #0f172a;
 }
+
 ::-webkit-scrollbar-thumb {
-  background: #2a2a4a;
-  border-radius: 3px;
+  background: #334155;
+  border-radius: 999px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
-  background: #3a3a6a;
+  background: #475569;
 }
 
 /* Focus visible ring */
 :focus-visible {
-  outline: 2px solid #6366f1;
+  outline: 2px solid #818cf8;
   outline-offset: 2px;
 }
 
-/* Visualize tab animations */
+/* Shared animations */
 @keyframes pinDrop {
-  0%   { transform: translateX(-50%) translateY(-20px); opacity: 0; }
-  60%  { transform: translateX(-50%) translateY(4px);   opacity: 1; }
-  100% { transform: translateX(-50%) translateY(0px);   opacity: 1; }
+  0% {
+    transform: translateX(-50%) translateY(-20px);
+    opacity: 0;
+  }
+  60% {
+    transform: translateX(-50%) translateY(4px);
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(-50%) translateY(0px);
+    opacity: 1;
+  }
 }
+
 @keyframes pinPulse {
-  0%, 100% { box-shadow: 0 0 6px currentColor; }
-  50%       { box-shadow: 0 0 16px currentColor; }
+  0%,
+  100% {
+    box-shadow: 0 0 6px currentColor;
+  }
+  50% {
+    box-shadow: 0 0 16px currentColor;
+  }
 }
+
 @keyframes fadeSlideIn {
-  from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-/* Smooth transitions */
-* {
-  transition-property: opacity, border-color, background-color;
-  transition-duration: 150ms;
-  transition-timing-function: ease-in-out;
-}
-
-/* Sprite animations */
-@keyframes spriteBob {
-  from { transform: translateY(0); }
-  to { transform: translateY(-4px); }
-}
-
-@keyframes floatLetter1 {
-  from { transform: translateY(0) rotate(-5deg); }
-  to { transform: translateY(-2px) rotate(5deg); }
-}
-
-@keyframes floatLetter2 {
-  from { transform: translateY(-2px) rotate(5deg); }
-  to { transform: translateY(1px) rotate(-8deg); }
-}
-
-@keyframes floatLetter3 {
-  from { transform: translateY(1px) rotate(0deg); }
-  to { transform: translateY(-3px) rotate(10deg); }
-}
-
-@keyframes thrusterPulse {
-  from { transform: scaleY(1); opacity: 0.7; }
-  to { transform: scaleY(1.4); opacity: 1; }
-}
-
-@keyframes flagPlant {
-  0% { transform: translateY(-10px) scale(0.8) rotate(-15deg); opacity: 0; }
-  50% { transform: translateY(2px) scale(1.1) rotate(5deg); opacity: 1; }
-  100% { transform: translateY(0) scale(1) rotate(0); opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
