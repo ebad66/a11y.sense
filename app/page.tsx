@@ -3,6 +3,7 @@
 import { useState, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { PROFILES } from '@/lib/profiles';
+import { JourneyTester } from '@/components/JourneyTester';
 
 const EXAMPLE_URLS = [
   'https://gov.uk',
@@ -240,6 +241,8 @@ export default function HomePage() {
           </div>
         ))}
       </div>
+
+      <JourneyTester />
 
       {/* Footer */}
       <footer className="mt-16 text-xs text-gray-700 text-center">
