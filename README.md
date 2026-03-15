@@ -50,6 +50,7 @@ When you're done auditing, generate a **developer-ready `.md` report** per WCAG 
 - **Actionable fixes** — not just what's broken, but how to fix it with precise CSS selectors
 - **Interactive 3D skeleton** — WCAG's four abstract principles made immediately human and intuitive
 - **Gemini Vision screenshot analysis** — visual layer inspection on top of DOM auditing
+- **Export PDF Summary** — easily generate a `.pdf` summary and analysis of detected issues
 - **Playwright-powered element resolution** — finds exact coordinates and selectors for every flagged element
 - **Dev Handoff export** — one-click `.md` report per principle, ready for GitHub
 
@@ -98,6 +99,8 @@ You ship accessible code
 | **Operable** | Hands / Limbs | Motor |
 | **Understandable** | Brain | Cognitive, Neurological |
 | **Robust** | Nervous System | Assistive technology users |
+| **Navigation** | Hands / Limbs | Motors |
+
 
 ---
 
