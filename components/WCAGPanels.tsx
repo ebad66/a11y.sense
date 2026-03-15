@@ -58,7 +58,7 @@ export function WCAGPanels({ issues, activeRegion, onRegionSelect, selectedIssue
               style={{
                 width: '100%',
                 display: 'flex',
-                justifyContent: 'space-between',
+                justifyContent: principle.id === 'Robust' ? 'center' : 'space-between',
                 alignItems: 'center',
                 padding: '12px 16px',
                 background: 'none',
@@ -67,14 +67,16 @@ export function WCAGPanels({ issues, activeRegion, onRegionSelect, selectedIssue
                 cursor: 'pointer',
                 fontFamily: '"Press Start 2P", monospace',
                 fontSize: '8px',
-                textAlign: 'left'
+                textAlign: principle.id === 'Robust' ? 'center' : 'left'
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: color }} />
                 <span>{principle.label}</span>
               </div>
-              <span style={{ color: '#6b7280' }}>{principleIssues.length}</span>
+              {principle.id !== 'Robust' && (
+                <span style={{ color: '#6b7280' }}>{principleIssues.length}</span>
+              )}
             </button>
 
             {/* Dropdown Content */}
