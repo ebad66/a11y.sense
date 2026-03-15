@@ -1,14 +1,28 @@
 'use client';
 
-import { useState, FormEvent } from 'react';
+import { FormEvent, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { WCAG_PRINCIPLES } from '@/lib/wcag';
+import { readApiErrorMessage } from '@/lib/api';
 
-const EXAMPLE_URLS = [
-  'https://gov.uk',
-  'https://bbc.com',
-  'https://github.com',
-  'https://wikipedia.org',
+const EXAMPLE_URLS = ['https://gov.uk', 'https://bbc.com', 'https://github.com', 'https://wikipedia.org'];
+
+const VALUE_POINTS = [
+  {
+    title: 'Evidence-backed findings',
+    description:
+      'Every issue includes WCAG references, affected element clues, and a practical remediation path.',
+  },
+  {
+    title: 'Prioritized remediation queue',
+    description:
+      'Critical blockers are surfaced first so teams can fix what matters before polishing lower-risk items.',
+  },
+  {
+    title: 'Visual proof for stakeholders',
+    description:
+      'View issue pins over a rendered screenshot to align product, design, and engineering quickly.',
+  },
 ];
 
 export default function HomePage() {
@@ -18,41 +32,61 @@ export default function HomePage() {
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<string>('');
 
+  const scanDisabled = isScanning || !url.trim();
+
+  const scanChecklist = useMemo(
+    () => [
+      'Load rendered page and screenshot',
+      'Run WCAG analysis across POUR principles',
+      'Map issues to page coordinates',
+      'Generate prioritized report',
+    ],
+    []
+  );
+
   const handleScan = async (e: FormEvent | null, overrideUrl?: string) => {
     if (e) e.preventDefault();
-    const targetUrl = overrideUrl || url;
-    if (!targetUrl.trim()) return;
+    const targetUrl = (overrideUrl || url).trim();
+    if (!targetUrl) return;
 
     setIsScanning(true);
     setError(null);
-    setProgress('Fetching page...');
+    setProgress('Preparing scan request...');
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 120_000);
 
     try {
-      setProgress('Scraping HTML & running accessibility audit...');
+      setProgress('Capturing page and running analysis...');
       const response = await fetch('/api/scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: targetUrl.trim() }),
+        body: JSON.stringify({ url: targetUrl }),
+        signal: controller.signal,
       });
 
-      const data = await response.json();
-
+      const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(data.error || 'Scan failed');
+        throw new Error(readApiErrorMessage(data, 'Scan failed. Please try again.'));
       }
 
-      setProgress('Redirecting to report...');
+      setProgress('Opening report...');
       router.push(`/scan/${data.sessionId}`);
     } catch (err) {
-      setError((err as Error).message);
+      if ((err as Error).name === 'AbortError') {
+        setError('Scan timed out after 120 seconds. Please retry or use a simpler page URL.');
+      } else {
+        setError((err as Error).message);
+      }
       setIsScanning(false);
       setProgress('');
+    } finally {
+      clearTimeout(timeout);
     }
   };
 
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center px-4 py-16">
-      {/* Skip nav */}
+    <main className="min-h-screen bg-[#0b1020] text-slate-100 px-4 py-10 sm:py-14">
       <a
         href="#scan-form"
         className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:rounded focus:bg-indigo-600 focus:text-white"
@@ -60,191 +94,158 @@ export default function HomePage() {
         Skip to scan form
       </a>
 
-      {/* Header */}
-      <div className="text-center mb-12 max-w-2xl">
-        <div
-          className="text-4xl mb-4"
-          aria-hidden="true"
-          style={{ letterSpacing: '-2px' }}
-        >
-          🔍
-        </div>
-        <h1
-          className="mb-4 text-white leading-tight"
-          style={{
-            fontFamily: '"Press Start 2P", monospace',
-            fontSize: 'clamp(18px, 4vw, 28px)',
-            lineHeight: '1.6',
-          }}
-        >
-          a11y.sense
-        </h1>
-        {/* WCAG principle pills */}
-        <div className="flex flex-wrap justify-center gap-2 mt-6" aria-label="WCAG 2.1 principles covered">
-          {WCAG_PRINCIPLES.map((p) => (
-            <span
-              key={p.id}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium text-white"
-              style={{ backgroundColor: `${p.color}33`, border: `1px solid ${p.color}66` }}
-              suppressHydrationWarning
-            >
-              <span aria-hidden="true">{p.emoji}</span>
-              {p.label}
-            </span>
-          ))}
-        </div>
-      </div>
-
-      {/* Scan form */}
-      <div
-        id="scan-form"
-        className="w-full max-w-2xl rounded-2xl p-8"
-        style={{ backgroundColor: '#1a1a2e', border: '1px solid #2a2a4a' }}
-        suppressHydrationWarning
-      >
-        <form onSubmit={handleScan} className="flex flex-col gap-4">
-          <label htmlFor="url-input" className="text-sm text-gray-400 font-medium">
-            Website URL
-          </label>
-          <div className="flex gap-3">
-            <input
-              id="url-input"
-              type="url"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              placeholder="https://example.com"
-              required
-              disabled={isScanning}
-              className="flex-1 px-4 py-3 rounded-lg text-white placeholder-gray-600 text-sm outline-none disabled:opacity-50"
-              style={{
-                backgroundColor: '#0f0f1a',
-                border: '2px solid #2a2a4a',
-                fontFamily: 'var(--font-inter)',
-              }}
-              onFocus={(e) => (e.target.style.borderColor = '#6366f1')}
-              onBlur={(e) => (e.target.style.borderColor = '#2a2a4a')}
-              aria-describedby="url-hint"
-              suppressHydrationWarning
-            />
-            <button
-              type="submit"
-              disabled={isScanning || !url.trim()}
-              className="px-6 py-3 rounded-lg text-white font-bold disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
-              style={{
-                backgroundColor: '#6366f1',
-                fontFamily: '"Press Start 2P", monospace',
-                fontSize: '10px',
-                minWidth: '100px',
-              }}
-              aria-label={isScanning ? 'Scanning in progress' : 'Start accessibility scan'}
-              suppressHydrationWarning
-            >
-              {isScanning ? (
-                <span className="flex items-center gap-2 justify-center">
-                  <span
-                    className="inline-block w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"
-                    aria-hidden="true"
-                  />
-                  ...
-                </span>
-              ) : (
-                'SCAN ▶'
-              )}
-            </button>
+      <div className="mx-auto max-w-6xl">
+        <header className="mb-10 sm:mb-12">
+          <div className="inline-flex items-center gap-2 rounded-full border border-indigo-400/30 bg-indigo-500/10 px-3 py-1 text-xs text-indigo-200">
+            <span aria-hidden="true">🧭</span>
+            WCAG 2.1 analysis with evidence and prioritization
           </div>
 
-          <p id="url-hint" className="text-xs text-gray-600">
-            The page will be fetched and audited against all four WCAG 2.1 principles. This typically takes 20–40 seconds.
+          <h1 className="mt-5 text-3xl sm:text-5xl font-semibold tracking-tight text-white max-w-4xl leading-tight">
+            a11y.sense helps teams find and fix accessibility blockers with actionable proof.
+          </h1>
+          <p className="mt-4 max-w-3xl text-slate-300 text-sm sm:text-base leading-relaxed">
+            Scan any live URL and get a structured report grouped by POUR principles, severity, and evidence.
+            Built for developers, product teams, and demo environments where trust matters.
           </p>
-        </form>
 
-        {/* Progress message */}
-        {isScanning && progress && (
-          <div
-            className="mt-4 px-4 py-3 rounded-lg text-sm text-indigo-300 flex items-center gap-3"
-            style={{ backgroundColor: '#1e1e3f' }}
-            role="status"
-            aria-live="polite"
-          >
-            <span
-              className="inline-block w-3 h-3 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin flex-shrink-0"
-              aria-hidden="true"
-            />
-            {progress}
-          </div>
-        )}
-
-        {/* Error message */}
-        {error && (
-          <div
-            className="mt-4 px-4 py-3 rounded-lg text-sm text-red-300"
-            style={{ backgroundColor: '#2d1515', border: '1px solid #ef444466' }}
-            role="alert"
-          >
-            <strong>Error:</strong> {error}
-          </div>
-        )}
-
-        {/* Example URLs */}
-        <div className="mt-6">
-          <p className="text-xs text-gray-600 mb-2">Try an example:</p>
-          <div className="flex flex-wrap gap-2">
-            {EXAMPLE_URLS.map((exUrl) => (
-              <button
-                key={exUrl}
-                type="button"
-                onClick={() => {
-                  setUrl(exUrl);
-                  handleScan(null, exUrl);
+          <div className="mt-6 flex flex-wrap gap-2" aria-label="WCAG principles covered">
+            {WCAG_PRINCIPLES.map((principle) => (
+              <span
+                key={principle.id}
+                className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs sm:text-sm"
+                style={{
+                  borderColor: `${principle.color}77`,
+                  backgroundColor: `${principle.color}1a`,
+                  color: '#f8fafc',
                 }}
-                disabled={isScanning}
-                className="text-xs px-3 py-1.5 rounded-md text-gray-400 hover:text-white transition-colors disabled:opacity-40"
-                style={{ backgroundColor: '#0f0f1a', border: '1px solid #2a2a4a' }}
-                suppressHydrationWarning
               >
-                {exUrl.replace('https://', '')}
-              </button>
+                <span aria-hidden="true">{principle.emoji}</span>
+                {principle.label}
+                <span className="text-slate-300">({principle.guidelines})</span>
+              </span>
             ))}
           </div>
-        </div>
-      </div>
+        </header>
 
-      {/* Feature highlights */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-12 max-w-2xl w-full">
-        {[
-          {
-            icon: '🎯',
-            title: 'WCAG 2.1 structured',
-            desc: 'Issues grouped under the four POUR principles — Perceivable, Operable, Understandable, Robust',
-          },
-          {
-            icon: '⚡',
-            title: 'Parallel audit',
-            desc: 'All four WCAG principles analysed simultaneously via Gemini AI',
-          },
-          {
-            icon: '📍',
-            title: 'Element pinpointing',
-            desc: 'Broken elements highlighted on a live screenshot with precise coordinate matching',
-          },
-        ].map((feat) => (
+        <section className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr] items-start">
           <div
-            key={feat.title}
-            className="rounded-xl p-4"
-            style={{ backgroundColor: '#1a1a2e', border: '1px solid #2a2a4a' }}
-            suppressHydrationWarning
+            id="scan-form"
+            className="rounded-2xl border border-slate-700/70 bg-slate-900/70 backdrop-blur-sm p-5 sm:p-7"
           >
-            <div className="text-2xl mb-2" aria-hidden="true">{feat.icon}</div>
-            <h3 className="text-white text-sm font-semibold mb-1">{feat.title}</h3>
-            <p className="text-gray-500 text-xs leading-relaxed">{feat.desc}</p>
-          </div>
-        ))}
-      </div>
+            <h2 className="text-lg sm:text-xl font-semibold text-white">Start a scan</h2>
+            <p className="mt-1 text-sm text-slate-300">
+              Enter a public URL. The scan usually completes in 20–60 seconds, depending on page complexity.
+            </p>
 
-      {/* Footer */}
-      <footer className="mt-16 text-xs text-gray-700 text-center">
-        Powered by Gemini (Google) · Next.js · WCAG 2.1
-      </footer>
+            <form onSubmit={handleScan} className="mt-5 flex flex-col gap-4">
+              <label htmlFor="url-input" className="text-sm text-slate-200 font-medium">
+                Website URL
+              </label>
+
+              <div className="flex flex-col sm:flex-row gap-3">
+                <input
+                  id="url-input"
+                  type="url"
+                  value={url}
+                  onChange={(event) => setUrl(event.target.value)}
+                  placeholder="https://example.com"
+                  required
+                  disabled={isScanning}
+                  className="flex-1 rounded-lg border border-slate-600 bg-slate-950 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-500 outline-none focus:border-indigo-400 disabled:opacity-60"
+                  aria-describedby="url-hint"
+                />
+                <button
+                  type="submit"
+                  disabled={scanDisabled}
+                  className="inline-flex items-center justify-center rounded-lg bg-indigo-500 px-5 py-3 text-xs sm:text-sm font-semibold text-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-indigo-400 transition-colors"
+                  aria-label={isScanning ? 'Scanning in progress' : 'Start accessibility scan'}
+                >
+                  {isScanning ? 'Scanning…' : 'Run scan'}
+                </button>
+              </div>
+
+              <p id="url-hint" className="text-xs text-slate-400">
+                Private/local hosts are blocked for safety. Use publicly reachable pages only.
+              </p>
+            </form>
+
+            {isScanning && progress && (
+              <div className="mt-4 rounded-lg border border-indigo-400/30 bg-indigo-500/10 px-4 py-3" role="status" aria-live="polite">
+                <div className="flex items-center gap-2 text-sm text-indigo-100">
+                  <span
+                    className="inline-block size-3 rounded-full border-2 border-indigo-300 border-t-transparent animate-spin"
+                    aria-hidden="true"
+                  />
+                  {progress}
+                </div>
+              </div>
+            )}
+
+            {error && (
+              <div className="mt-4 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-100" role="alert">
+                <strong className="font-semibold">Scan failed:</strong> {error}
+              </div>
+            )}
+
+            <div className="mt-6">
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Try an example</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {EXAMPLE_URLS.map((exampleUrl) => (
+                  <button
+                    key={exampleUrl}
+                    type="button"
+                    disabled={isScanning}
+                    onClick={() => {
+                      setUrl(exampleUrl);
+                      void handleScan(null, exampleUrl);
+                    }}
+                    className="rounded-md border border-slate-600 bg-slate-950 px-3 py-1.5 text-xs text-slate-200 hover:border-indigo-400 hover:text-white disabled:opacity-50"
+                  >
+                    {exampleUrl.replace('https://', '')}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <aside className="rounded-2xl border border-slate-700/70 bg-slate-900/60 p-5 sm:p-6">
+            <h2 className="text-base font-semibold text-white">What the report includes</h2>
+            <ul className="mt-4 space-y-3">
+              {scanChecklist.map((step, index) => (
+                <li key={step} className="flex gap-3 text-sm text-slate-300">
+                  <span className="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full border border-slate-500 text-[11px] text-slate-200">
+                    {index + 1}
+                  </span>
+                  {step}
+                </li>
+              ))}
+            </ul>
+
+            <div className="mt-6 rounded-xl border border-slate-700 bg-slate-950/60 p-4">
+              <p className="text-xs uppercase tracking-wide text-slate-400">Credibility notes</p>
+              <ul className="mt-2 space-y-2 text-xs text-slate-300 leading-relaxed">
+                <li>• Findings are AI-assisted and should be verified with deterministic tools before compliance sign-off.</li>
+                <li>• Every issue is linked to WCAG context and a suggested remediation path.</li>
+                <li>• Report links are session-based and currently retained in-memory for 24 hours.</li>
+              </ul>
+            </div>
+          </aside>
+        </section>
+
+        <section className="mt-8 grid gap-4 sm:grid-cols-3">
+          {VALUE_POINTS.map((point) => (
+            <article key={point.title} className="rounded-xl border border-slate-700/70 bg-slate-900/55 p-4">
+              <h3 className="text-sm font-semibold text-white">{point.title}</h3>
+              <p className="mt-1 text-xs sm:text-sm text-slate-300 leading-relaxed">{point.description}</p>
+            </article>
+          ))}
+        </section>
+
+        <footer className="mt-10 border-t border-slate-800 pt-5 text-xs text-slate-400">
+          Powered by Next.js, Playwright, and Gemini-based analysis. Built for practical remediation workflows.
+        </footer>
+      </div>
     </main>
   );
 }
