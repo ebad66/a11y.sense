@@ -3,6 +3,7 @@ import { getSession } from '@/lib/session';
 import { getProfile, ProfileId } from '@/lib/profiles';
 import { simulateProfileView } from '@/lib/gemini';
 import { generateBlindSimulationHtml } from '@/lib/blind-simulation';
+import { makeApiError } from '@/lib/api';
 
 export const maxDuration = 300;
 
@@ -12,26 +13,47 @@ export async function POST(req: NextRequest) {
     const { sessionId, profileId, screenshotBase64, screenshotMimeType } = body;
 
     if (!sessionId || !profileId) {
-      return NextResponse.json({ error: 'Missing sessionId or profileId' }, { status: 400 });
+      return NextResponse.json(
+        makeApiError('BAD_REQUEST', 'Missing sessionId or profileId.', {
+          stage: 'simulate.validate',
+          retryable: false,
+        }),
+        { status: 400 }
+      );
     }
 
-    if (!process.env.GEMINI_API_KEY) {
+    if (!process.env.GEMINI_API_KEY && !process.env.GOOGLE_API_KEY) {
       return NextResponse.json(
-        { error: 'GEMINI_API_KEY is not configured' },
+        makeApiError('MISSING_CONFIG', 'GEMINI_API_KEY is not configured.', {
+          stage: 'simulate.config',
+          retryable: false,
+        }),
         { status: 500 }
       );
     }
 
     const session = getSession(sessionId);
     if (!session) {
-      return NextResponse.json({ error: 'Session not found or expired' }, { status: 404 });
+      return NextResponse.json(
+        makeApiError('SESSION_NOT_FOUND', 'Session not found or expired.', {
+          stage: 'simulate.session',
+          retryable: false,
+        }),
+        { status: 404 }
+      );
     }
 
     let profile;
     try {
       profile = getProfile(profileId as ProfileId);
     } catch {
-      return NextResponse.json({ error: 'Invalid profile ID' }, { status: 400 });
+      return NextResponse.json(
+        makeApiError('BAD_REQUEST', 'Invalid profile ID.', {
+          stage: 'simulate.validate',
+          retryable: false,
+        }),
+        { status: 400 }
+      );
     }
 
     const imageData = screenshotBase64 || session.screenshot;
@@ -39,20 +61,19 @@ export async function POST(req: NextRequest) {
 
     if (!imageData) {
       return NextResponse.json(
-        { error: 'No screenshot available for this session.' },
+        makeApiError('BAD_REQUEST', 'No screenshot available for this session.', {
+          stage: 'simulate.validate',
+          retryable: false,
+        }),
         { status: 400 }
       );
     }
 
     // Blind profile: generate interactive HTML simulation instead of calling the image API
     if (profileId === 'blind') {
-      console.log(`[Simulate] Running blind HTML simulation for ${session.url}`);
       const html = await generateBlindSimulationHtml(session.url);
       return NextResponse.json({ profileId: 'blind', type: 'html', html, description: '' });
     }
-
-    const keyPreview = (process.env.GEMINI_API_KEY || '').slice(0, 8);
-    console.log(`[Simulate] Running ${profile.label} simulation | key starts with: ${keyPreview}…`);
 
     const result = await simulateProfileView(
       imageData,
@@ -69,7 +90,10 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     console.error('[Simulate] Error:', err);
     return NextResponse.json(
-      { error: `Simulation failed: ${(err as Error).message}` },
+      makeApiError('SIMULATION_FAILED', `Simulation failed: ${(err as Error).message}`, {
+        stage: 'simulate.execute',
+        retryable: true,
+      }),
       { status: 500 }
     );
   }

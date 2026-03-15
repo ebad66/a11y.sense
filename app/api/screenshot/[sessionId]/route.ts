@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
+import { makeApiError } from '@/lib/api';
 
 export async function GET(
   _req: NextRequest,
@@ -9,7 +10,13 @@ export async function GET(
   const session = getSession(sessionId);
 
   if (!session || !session.screenshot) {
-    return NextResponse.json({ error: 'Screenshot not found' }, { status: 404 });
+    return NextResponse.json(
+      makeApiError('SESSION_NOT_FOUND', 'Screenshot not found for this session.', {
+        stage: 'screenshot.fetch',
+        retryable: false,
+      }),
+      { status: 404 }
+    );
   }
 
   const buffer = Buffer.from(session.screenshot, 'base64');
